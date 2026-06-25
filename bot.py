@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from telegram.error import TelegramError, BadRequest, Forbidden
-from groq import Groq
+import google.generativeai as genai
 
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
@@ -18,24 +18,26 @@ logger = logging.getLogger(__name__)
 
 # ==================== تنظیمات ====================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "8065571732"))
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@synapse_os")
 
-# بررسی وجود توکن‌ها
+# بررسی توکن بات
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN در متغیرهای محیطی تنظیم نشده است!")
-if not GROQ_API_KEY:
-    raise ValueError("❌ GROQ_API_KEY در متغیرهای محیطی تنظیم نشده است!")
 
 logger.info(f"✅ ربات با موفقیت راه‌اندازی شد!")
 logger.info(f"📢 کانال: {CHANNEL_ID}")
 logger.info(f"👑 ادمین: {ADMIN_ID}")
 
 try:
-    client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        client = genai.GenerativeModel("gemini-1.5-flash")
+    else:
+        client = None
 except Exception as e:
-    logger.error(f"خطا در راه‌اندازی Groq: {e}")
+    logger.error(f"خطا در راه‌اندازی Gemini: {e}")
     client = None
 
 # فایل‌های JSON
@@ -1071,24 +1073,18 @@ async def handle_menu(update: Update, context):
 
         user_info = get_user_info(user_id)
         try:
-            response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": f"""تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی.
-                    اطلاعات کاربر: نام: {user_info.get('first_name', '')} {user_info.get('last_name', '')}
-                    کسب و کار: {user_info.get('business_name', '')}
-                    با لحنی گرم و دوستانه پاسخ بده. حتما به فارسی روان پاسخ بده."""},
-                    {"role": "user", "content": text}
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
+            system_prompt = f"""تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی.
+اطلاعات کاربر: نام: {user_info.get('first_name', '')} {user_info.get('last_name', '')}
+کسب و کار: {user_info.get('business_name', '')}
+با لحنی گرم و دوستانه پاسخ بده. حتما به فارسی روان پاسخ بده."""
+
+            response = client.generate_content(f"{system_prompt}\n\nکاربر: {text}")
             await update.message.reply_text(
-                response.choices[0].message.content,
+                response.text,
                 reply_markup=back_menu
             )
         except Exception as e:
-            logger.error(f"خطا در Groq: {e}")
+            logger.error(f"خطا در Gemini: {e}")
             await update.message.reply_text(
                 "⚠️ خطا در ارتباط با سرور. لطفاً چند لحظه دیگر تلاش کنید.",
                 reply_markup=back_menu
