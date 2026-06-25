@@ -9,13 +9,6 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 from telegram.error import TelegramError, BadRequest, Forbidden
 from groq import Groq
 
-# بارگذاری .env برای اجرای لوکال (روی Railway نیازی نیست)
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -24,15 +17,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== تنظیمات ====================
-BOT_TOKEN    = os.environ.get("BOT_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-ADMIN_ID     = int(os.environ.get("ADMIN_ID", "8065571732"))
-CHANNEL_ID   = os.environ.get("CHANNEL_ID", "@synapdse_os")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "8065571732"))
+CHANNEL_ID = os.environ.get("CHANNEL_ID", "@synapse_os")
 
+# بررسی وجود توکن‌ها
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN تنظیم نشده! آن را در Railway → Variables اضافه کن.")
+    raise ValueError("❌ BOT_TOKEN در متغیرهای محیطی تنظیم نشده است!")
+if not GROQ_API_KEY:
+    raise ValueError("❌ GROQ_API_KEY در متغیرهای محیطی تنظیم نشده است!")
 
-logger.info("✅ ربات در حال راه‌اندازی...")
+logger.info(f"✅ ربات با موفقیت راه‌اندازی شد!")
 logger.info(f"📢 کانال: {CHANNEL_ID}")
 logger.info(f"👑 ادمین: {ADMIN_ID}")
 
