@@ -9,6 +9,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 from telegram.error import TelegramError, BadRequest, Forbidden
 import google.generativeai as genai
 
+
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -33,7 +34,15 @@ logger.info(f"👑 ادمین: {ADMIN_ID}")
 try:
     if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
-        client = genai.GenerativeModel("gemini-1.5-flash")
+        client = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=(
+                "تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی. "
+                "با لحنی گرم، دوستانه و حرفه‌ای پاسخ بده. "
+                "همیشه به فارسی روان پاسخ بده. "
+                "پاسخ‌هایت را کوتاه و مفید نگه دار."
+            )
+        )
     else:
         client = None
 except Exception as e:
@@ -1055,7 +1064,7 @@ async def handle_menu(update: Update, context):
                 )
         return
     
-    # ========== گفتگو با Groq ==========
+    # ========== گفتگو با Gemini ==========
     if state["section"] is None:
         if not is_user_registered(user_id):
             await update.message.reply_text(
@@ -1073,12 +1082,15 @@ async def handle_menu(update: Update, context):
 
         user_info = get_user_info(user_id)
         try:
-            system_prompt = f"""تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی.
-اطلاعات کاربر: نام: {user_info.get('first_name', '')} {user_info.get('last_name', '')}
-کسب و کار: {user_info.get('business_name', '')}
-با لحنی گرم و دوستانه پاسخ بده. حتما به فارسی روان پاسخ بده."""
+            user_context = (
+                f"اطلاعات کاربر:\n"
+                f"نام: {user_info.get('first_name', '')} {user_info.get('last_name', '')}\n"
+                f"کسب و کار: {user_info.get('business_name', 'ثبت نشده')}\n"
+                f"شهر: {user_info.get('city', 'ثبت نشده')}\n\n"
+                f"سوال کاربر: {text}"
+            )
 
-            response = client.generate_content(f"{system_prompt}\n\nکاربر: {text}")
+            response = client.generate_content(user_context)
             await update.message.reply_text(
                 response.text,
                 reply_markup=back_menu
