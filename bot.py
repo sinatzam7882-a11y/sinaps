@@ -428,6 +428,63 @@ assessment_questions = [
     ("note", "🔟 آیا نکته‌ای هست که فکر می‌کنی برای شناخت بهتر تو باید بدانیم؟\n(اختیاری)")
 ]
 
+# ==================== سوالات بخش‌های اصلی ====================
+market_work_questions = [
+    ("activity", "1️⃣ امروز بیشتر مشغول چه کاری هستی؟"),
+    ("strength", "2️⃣ فکر می‌کنی در چه کاری از بقیه بهتر هستی؟"),
+    ("concern", "3️⃣ این روزها مهم‌ترین دغدغه کاری تو چیست؟"),
+    ("vision", "4️⃣ اگر همه چیز خوب پیش برود، دوست داری یک سال دیگر در چه جایگاهی باشی؟"),
+    ("obstacle", "5️⃣ چه چیزی بیشتر از همه جلوی رسیدن تو به آن نقطه را گرفته است؟"),
+    ("satisfaction", "6️⃣ امروز از وضعیت کاری خودت چقدر رضایت داری؟ (از 1 تا 10)"),
+    ("wish", "7️⃣ اگر سیناپس فقط یک کمک به تو بکند، دوست داری آن کمک چه باشد؟"),
+]
+
+business_section_questions = [
+    ("activity", "1️⃣ امروز روی چه چیزی کار می‌کنی؟"),
+    ("strength", "2️⃣ به نظرت مهم‌ترین نقطه قوت کسب‌وکار یا برند تو چیست؟"),
+    ("energy", "3️⃣ این روزها بیشترین انرژی تو صرف حل چه مسئله‌ای می‌شود؟"),
+    ("vision", "4️⃣ اگر یک سال دیگر به نقطه مطلوب برسی، چه تغییری در کسب‌وکارت رخ داده است؟"),
+    ("obstacle", "5️⃣ چه چیزی بیشتر از همه جلوی رشد تو را گرفته است؟"),
+    ("satisfaction", "6️⃣ امروز از وضعیت کسب‌وکارت چقدر رضایت داری؟ (از 1 تا 10)"),
+    ("wish", "7️⃣ اگر سیناپس فقط یک کمک به تو بکند، دوست داری آن کمک چه باشد؟"),
+]
+
+social_section_questions = [
+    ("issue", "1️⃣ چه مسئله‌ای در جامعه بیشتر از همه برای تو اهمیت دارد؟"),
+    ("why", "2️⃣ چرا این موضوع برایت مهم است؟"),
+    ("done", "3️⃣ تا امروز برای آن چه کاری انجام داده‌ای؟"),
+    ("vision", "4️⃣ دوست داری یک سال دیگر چه اثری از خودت به جا گذاشته باشی؟"),
+    ("obstacle", "5️⃣ چه چیزی مانع اثرگذاری بیشتر تو شده است؟"),
+    ("satisfaction", "6️⃣ امروز از میزان اثرگذاری خودت چقدر رضایت داری؟ (از 1 تا 10)"),
+    ("wish", "7️⃣ اگر سیناپس فقط یک کمک به تو بکند، دوست داری آن کمک چه باشد؟"),
+]
+
+growth_section_questions = [
+    ("mind", "1️⃣ این روزها بیشتر ذهنت درگیر چیست؟"),
+    ("satisfied", "2️⃣ از کدام بخش زندگی خودت بیشتر رضایت داری؟"),
+    ("attention", "3️⃣ کدام بخش زندگی تو بیشتر از همه به توجه نیاز دارد؟"),
+    ("vision", "4️⃣ اگر یک سال دیگر به نسخه مطلوب خودت نزدیک شوی، چه چیزی در زندگی‌ات تغییر کرده است؟"),
+    ("obstacle", "5️⃣ فکر می‌کنی مهم‌ترین مانع رشد تو چیست؟"),
+    ("satisfaction", "6️⃣ امروز از مسیر زندگی خودت چقدر رضایت داری؟ (از 1 تا 10)"),
+    ("wish", "7️⃣ اگر سیناپس فقط یک کمک به تو بکند، دوست داری آن کمک چه باشد؟"),
+]
+
+PAYMENT_MESSAGE = """🌱 ممنون که با صداقت پاسخ دادی.
+
+پاسخ‌های تو در سیناپس صرفاً یک فرم نیست؛ تلاشی است برای دیدن تصویری شفاف‌تر از جایی که امروز ایستاده‌ای و مسیری که می‌توانی در آن رشد کنی.
+
+📋 گزارش شناخت سیناپس شامل:
+✨ آنچه امروز از تو می‌بینیم
+✨ نقاط قوت و ظرفیت‌ها
+✨ گره‌ها و موانع مسیر
+✨ فرصت‌های رشد
+✨ پیشنهاد گام بعدی
+
+⏰ زمان تحویل: حداکثر ۲۴ ساعت
+💳 هزینه گزارش شناخت: ۲۵۰ هزار تومان
+
+پس از پرداخت، فیش واریزی خود را اینجا ارسال کنید تا فرآیند بررسی آغاز شود. 👇"""
+
 # ==================== وضعیت کاربران ====================
 user_states = {}
 
@@ -567,6 +624,90 @@ def get_info_summary(info, section_type):
     
     return ""
 
+def save_section_to_excel(user_id, section_name, section_label, answers):
+    """ذخیره پاسخ‌های هر بخش در اکسل"""
+    try:
+        if os.path.exists(EXCEL_FILE):
+            wb = openpyxl.load_workbook(EXCEL_FILE)
+        else:
+            wb = openpyxl.Workbook()
+            if "Sheet" in wb.sheetnames:
+                del wb["Sheet"]
+
+        sheet_name = section_label.replace("🟢 ", "").replace("🔵 ", "").replace("🟣 ", "").replace("🟠 ", "")[:20]
+        if sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+        else:
+            ws = wb.create_sheet(sheet_name)
+            headers = ["ردیف", "آیدی", "نام", "نوع", "تاریخ",
+                       "پاسخ ۱", "پاسخ ۲", "پاسخ ۳", "پاسخ ۴", "پاسخ ۵", "پاسخ ۶", "پاسخ ۷"]
+            for col, h in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col, value=h)
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill("solid", fgColor="4472C4")
+                cell.alignment = Alignment(horizontal="center")
+
+        users = read_json(USERS_FILE, {})
+        user_info = users.get(str(user_id), {})
+        name = f"{user_info.get('first_name','')} {user_info.get('last_name','')}"
+        row = ws.max_row + 1
+
+        ws.cell(row=row, column=1, value=row - 1)
+        ws.cell(row=row, column=2, value=str(user_id))
+        ws.cell(row=row, column=3, value=name)
+        ws.cell(row=row, column=4, value=answers.get("sub_type", ""))
+        ws.cell(row=row, column=5, value=datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        q_map = {
+            "market_work": market_work_questions,
+            "business_section": business_section_questions,
+            "social_section": social_section_questions,
+            "growth_section": growth_section_questions,
+        }
+        questions = q_map.get(section_name, [])
+        for i, (q_key, _) in enumerate(questions):
+            ws.cell(row=row, column=6 + i, value=answers.get(q_key, ""))
+
+        wb.save(EXCEL_FILE)
+        logger.info(f"✅ پاسخ‌های {section_label} برای کاربر {user_id} در اکسل ذخیره شد.")
+    except Exception as e:
+        logger.error(f"خطا در ذخیره اکسل بخش: {e}")
+
+
+async def handle_photo(update: Update, context):
+    """دریافت فیش واریزی از کاربر"""
+    user_id = update.effective_user.id
+    state = get_user_state(user_id)
+
+    if state["section"] == "waiting_receipt":
+        user_info = get_user_info(user_id)
+        name = f"{user_info.get('first_name','')} {user_info.get('last_name','')}"
+        caption = f"💳 فیش واریزی جدید\n👤 {name}\n🆔 {user_id}\n📱 {user_info.get('phone','')}"
+
+        try:
+            photo = update.message.photo[-1]
+            await context.bot.send_photo(
+                chat_id=ADMIN_ID,
+                photo=photo.file_id,
+                caption=caption
+            )
+            clear_user_state(user_id)
+            await update.message.reply_text(
+                "✅ فیش واریزی شما دریافت شد.\n"
+                "بررسی شروع خواهد شد و گزارش شناخت حداکثر ظرف ۲۴ ساعت ارسال می‌شود. 🌱",
+                reply_markup=main_menu
+            )
+        except Exception as e:
+            logger.error(f"خطا در ارسال فیش: {e}")
+            await update.message.reply_text("⚠️ خطا در دریافت تصویر. دوباره ارسال کنید.")
+    else:
+        await update.message.reply_text(
+            "📸 در حال حاضر نیازی به ارسال تصویر نیست.\n"
+            "اگر می‌خواهید فیش پرداخت ارسال کنید، ابتدا یکی از بخش‌های اصلی را تکمیل کنید.",
+            reply_markup=main_menu
+        )
+
+
 # ==================== پردازش منو ====================
 async def handle_menu(update: Update, context):
     user_id = update.effective_user.id
@@ -622,21 +763,16 @@ async def handle_menu(update: Update, context):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
             await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
+                f"🌱 ابتدا باید ارزیابی اولیه را تکمیل کنی.\n\n{assessment_questions[0][1]}",
                 reply_markup=back_menu
             )
             return
-        
+
+        clear_user_state(user_id)
+        set_user_state(user_id, "market_work", 0, {"sub_type": text})
         await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=market_menu
+            f"✅ {text} را انتخاب کردی.\n\n{market_work_questions[0][1]}",
+            reply_markup=back_menu
         )
         return
     
@@ -654,21 +790,16 @@ async def handle_menu(update: Update, context):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
             await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
+                f"🌱 ابتدا باید ارزیابی اولیه را تکمیل کنی.\n\n{assessment_questions[0][1]}",
                 reply_markup=back_menu
             )
             return
-        
+
+        clear_user_state(user_id)
+        set_user_state(user_id, "business_section", 0, {"sub_type": text})
         await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=business_menu
+            f"✅ {text} را انتخاب کردی.\n\n{business_section_questions[0][1]}",
+            reply_markup=back_menu
         )
         return
     
@@ -686,21 +817,16 @@ async def handle_menu(update: Update, context):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
             await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
+                f"🌱 ابتدا باید ارزیابی اولیه را تکمیل کنی.\n\n{assessment_questions[0][1]}",
                 reply_markup=back_menu
             )
             return
-        
+
+        clear_user_state(user_id)
+        set_user_state(user_id, "social_section", 0, {"sub_type": text})
         await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=social_menu
+            f"✅ {text} را انتخاب کردی.\n\n{social_section_questions[0][1]}",
+            reply_markup=back_menu
         )
         return
     
@@ -718,21 +844,16 @@ async def handle_menu(update: Update, context):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
             await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
+                f"🌱 ابتدا باید ارزیابی اولیه را تکمیل کنی.\n\n{assessment_questions[0][1]}",
                 reply_markup=back_menu
             )
             return
-        
+
+        clear_user_state(user_id)
+        set_user_state(user_id, "growth_section", 0, {"sub_type": text})
         await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=growth_menu
+            f"✅ {text} را انتخاب کردی.\n\n{growth_section_questions[0][1]}",
+            reply_markup=back_menu
         )
         return
     
@@ -1064,7 +1185,77 @@ async def handle_menu(update: Update, context):
                 )
         return
     
-    # ========== گفتگو با Gemini ==========
+    # ===== تابع کمکی برای ذخیره پاسخ‌های بخش‌ها =====
+    async def process_section_questions(section_name, questions, section_label):
+        nonlocal state, step, temp
+        if step < len(questions):
+            field_name, _ = questions[step]
+            temp[field_name] = text
+
+            if step + 1 < len(questions):
+                set_user_state(user_id, section_name, step + 1, temp)
+                _, next_q = questions[step + 1]
+                await update.message.reply_text(next_q, reply_markup=back_menu)
+            else:
+                # ذخیره در JSON
+                section_data = read_json("sections.json", {})
+                uid = str(user_id)
+                if uid not in section_data:
+                    section_data[uid] = {}
+                section_data[uid][section_name] = {
+                    "sub_type": temp.get("sub_type", ""),
+                    "answers": temp,
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }
+                write_json("sections.json", section_data)
+
+                # ذخیره در اکسل
+                save_section_to_excel(user_id, section_name, section_label, temp)
+
+                # اطلاع به ادمین
+                user_info = get_user_info(user_id)
+                name = f"{user_info.get('first_name','')} {user_info.get('last_name','')}"
+                admin_msg = f"📋 پاسخ‌های جدید - {section_label}\n👤 {name} | 🆔 {user_id}\n🔖 {temp.get('sub_type','')}\n"
+                for q_key, q_text in questions:
+                    admin_msg += f"\n❓ {q_text[:50]}...\n💬 {temp.get(q_key, '-')}"
+                try:
+                    await context.bot.send_message(ADMIN_ID, admin_msg[:4000])
+                except Exception:
+                    pass
+
+                set_user_state(user_id, "waiting_receipt", 0, {"section": section_name})
+                await update.message.reply_text(PAYMENT_MESSAGE, reply_markup=back_menu)
+        return True
+
+    # ===== بازار کار =====
+    if section == "market_work":
+        await process_section_questions("market_work", market_work_questions, "🟢 بازار کار")
+        return
+
+    # ===== کسب‌وکار =====
+    if section == "business_section":
+        await process_section_questions("business_section", business_section_questions, "🔵 کسب‌وکار")
+        return
+
+    # ===== مسئولیت اجتماعی =====
+    if section == "social_section":
+        await process_section_questions("social_section", social_section_questions, "🟣 مسئولیت اجتماعی")
+        return
+
+    # ===== مسیر رشد =====
+    if section == "growth_section":
+        await process_section_questions("growth_section", growth_section_questions, "🟠 مسیر رشد")
+        return
+
+    # ===== انتظار برای فیش =====
+    if section == "waiting_receipt":
+        await update.message.reply_text(
+            "📸 لطفاً تصویر فیش واریزی خود را ارسال کنید.",
+            reply_markup=back_menu
+        )
+        return
+
+    
     if state["section"] is None:
         if not is_user_registered(user_id):
             await update.message.reply_text(
@@ -1418,6 +1609,7 @@ app.add_handler(CommandHandler("getdata", get_data))
 app.add_handler(CommandHandler("summary", show_summary))
 app.add_handler(CommandHandler("broadcast", broadcast))
 app.add_handler(CallbackQueryHandler(handle_callback))
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu))
 
 print("🤖 بات سیناپس با فرم ارزیابی روشن شد...")
