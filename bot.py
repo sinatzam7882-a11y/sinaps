@@ -30,14 +30,16 @@ logger.info(f"✅ ربات با موفقیت راه‌اندازی شد!")
 logger.info(f"📢 کانال: {CHANNEL_ID}")
 logger.info(f"👑 ادمین: {ADMIN_ID}")
 
+SYSTEM_PROMPT = (
+    "تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی. "
+    "با لحنی گرم، دوستانه و حرفه‌ای پاسخ بده. "
+    "همیشه به فارسی روان پاسخ بده. "
+    "پاسخ‌هایت را کوتاه و مفید نگه دار."
+)
+
 try:
     if GEMINI_API_KEY:
-        client = genai.Client(api_key=GEMINI_API_KEY)=(
-                "تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی. "
-                "با لحنی گرم، دوستانه و حرفه‌ای پاسخ بده. "
-                "همیشه به فارسی روان پاسخ بده. "
-                "پاسخ‌هایت را کوتاه و مفید نگه دار."
-            )
+        client = genai.Client(api_key=GEMINI_API_KEY)
         logger.info("✅ Gemini متصل شد.")
     else:
         client = None
@@ -333,13 +335,13 @@ def generate_excel_report():
 
 # ==================== منوها ====================
 main_menu = ReplyKeyboardMarkup([
+    [KeyboardButton("🌱 محصولات سیناپس")],
     [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار")],
     [KeyboardButton("🟣 مسئولیت اجتماعی"), KeyboardButton("🟠 مسیر رشد")],
-    [KeyboardButton("🔴 لیدی لجستیک"), KeyboardButton("🌱 محصولات سیناپس")],
-    [KeyboardButton("📖 راهنمای انتخاب مسیر"), KeyboardButton("🆔 اطلاعات شخصی")],
-    [KeyboardButton("🏢 اطلاعات کسب و کار"), KeyboardButton("📊 پرسشنامه تخصصی")],
-    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📞 ارتباط با پشتیبانی")],
-    [KeyboardButton("💳 ارسال فیش پرداخت")]
+    [KeyboardButton("🔴 لیدی لجستیک"), KeyboardButton("📖 راهنمای انتخاب مسیر")],
+    [KeyboardButton("🆔 اطلاعات شخصی"), KeyboardButton("🏢 اطلاعات کسب و کار")],
+    [KeyboardButton("📊 پرسشنامه تخصصی"), KeyboardButton("💬 مشاوره هوشمند")],
+    [KeyboardButton("📞 ارتباط با پشتیبانی"), KeyboardButton("💳 ارسال فیش پرداخت")],
 ], resize_keyboard=True)
 
 market_menu = ReplyKeyboardMarkup([
@@ -1103,12 +1105,12 @@ async def handle_menu(update: Update, context):
                 f"سوال کاربر: {text}"
             )
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-1.5-flash",
                 contents=user_context,
                 config={
                     "system_instruction": SYSTEM_PROMPT,
                     "temperature": 0.7,
-                }   
+                }
             )
             await update.message.reply_text(
                 f"{first_name} عزیز،\n\n{response.text}",
