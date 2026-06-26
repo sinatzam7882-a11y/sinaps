@@ -7,8 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from telegram.error import TelegramError, BadRequest, Forbidden
-import google.generativeai as genai
-
+from google import genai
 
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
@@ -33,16 +32,12 @@ logger.info(f"👑 ادمین: {ADMIN_ID}")
 
 try:
     if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        client = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=(
+        client = genai.Client(api_key=GEMINI_API_KEY)=(
                 "تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی. "
                 "با لحنی گرم، دوستانه و حرفه‌ای پاسخ بده. "
                 "همیشه به فارسی روان پاسخ بده. "
                 "پاسخ‌هایت را کوتاه و مفید نگه دار."
             )
-        )
         logger.info("✅ Gemini متصل شد.")
     else:
         client = None
@@ -1107,7 +1102,14 @@ async def handle_menu(update: Update, context):
                 f"شهر: {user_info.get('city', 'ثبت نشده')}\n\n"
                 f"سوال کاربر: {text}"
             )
-            response = client.generate_content(user_context)
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=user_context,
+                config={
+                    "system_instruction": SYSTEM_PROMPT,
+                    "temperature": 0.7,
+                }   
+            )
             await update.message.reply_text(
                 f"{first_name} عزیز،\n\n{response.text}",
                 reply_markup=back_menu
