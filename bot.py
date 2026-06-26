@@ -8,6 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from telegram.error import TelegramError, BadRequest, Forbidden
 from google import genai
+from google.genai import types
 
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
@@ -335,13 +336,13 @@ def generate_excel_report():
 
 # ==================== منوها ====================
 main_menu = ReplyKeyboardMarkup([
-    [KeyboardButton("🌱 محصولات سیناپس")],
     [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار")],
     [KeyboardButton("🟣 مسئولیت اجتماعی"), KeyboardButton("🟠 مسیر رشد")],
-    [KeyboardButton("🔴 لیدی لجستیک"), KeyboardButton("📖 راهنمای انتخاب مسیر")],
-    [KeyboardButton("🆔 اطلاعات شخصی"), KeyboardButton("🏢 اطلاعات کسب و کار")],
-    [KeyboardButton("📊 پرسشنامه تخصصی"), KeyboardButton("💬 مشاوره هوشمند")],
-    [KeyboardButton("📞 ارتباط با پشتیبانی"), KeyboardButton("💳 ارسال فیش پرداخت")],
+    [KeyboardButton("🔴 لیدی لجستیک"), KeyboardButton("🌱 محصولات سیناپس")],
+    [KeyboardButton("📖 راهنمای انتخاب مسیر"), KeyboardButton("🆔 اطلاعات شخصی")],
+    [KeyboardButton("🏢 اطلاعات کسب و کار"), KeyboardButton("📊 پرسشنامه تخصصی")],
+    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📞 ارتباط با پشتیبانی")],
+    [KeyboardButton("💳 ارسال فیش پرداخت")]
 ], resize_keyboard=True)
 
 market_menu = ReplyKeyboardMarkup([
@@ -1107,10 +1108,10 @@ async def handle_menu(update: Update, context):
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
                 contents=user_context,
-                config={
-                    "system_instruction": SYSTEM_PROMPT,
-                    "temperature": 0.7,
-                }
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.7,
+                )
             )
             await update.message.reply_text(
                 f"{first_name} عزیز،\n\n{response.text}",
