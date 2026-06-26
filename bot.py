@@ -8,7 +8,6 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 from telegram.error import TelegramError, BadRequest, Forbidden
 from google import genai
-from google.genai import types
 
 # ==================== تنظیمات لاگینگ ====================
 logging.basicConfig(
@@ -77,6 +76,7 @@ def write_json(file_path, data):
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# ==================== توابع ذخیره ====================
 def save_user_info(user_id, info):
     users = read_json(USERS_FILE, {})
     if str(user_id) not in users:
@@ -124,26 +124,72 @@ def has_completed_assessment(user_id):
     assessments = read_json(ASSESSMENT_FILE, {})
     return str(user_id) in assessments and len(assessments[str(user_id)]) > 5
 
-# ==================== بررسی عضویت ====================
+# ==================== توابع بررسی عضویت ====================
 async def is_member_of_channel(user_id, context):
+    """بررسی عضویت کاربر در کانال با روش مطمئن"""
     try:
-        chat_member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        chat_member = await context.bot.get_chat_member(
+            chat_id=CHANNEL_ID,
+            user_id=user_id
+        )
         valid_statuses = ['member', 'administrator', 'creator']
-        return chat_member.status in valid_statuses
-    except:
+        is_member = chat_member.status in valid_statuses
+        logger.info(f"{'✅' if is_member else '❌'} کاربر {user_id} - وضعیت کانال: {chat_member.status}")
+        return is_member
+
+    except Forbidden as e:
+        # بات ادمین کانال نیست یا دسترسی ندارد
+        logger.warning(f"⛔ بات به کانال دسترسی ندارد (کاربر {user_id}): {e}")
+        # اگر بات ادمین کانال نباشد، فرض می‌کنیم کاربر عضو است تا ربات کار کند
         return True
 
+    except BadRequest as e:
+        error_msg = str(e).lower()
+        logger.error(f"❌ درخواست نامعتبر (کاربر {user_id}): {e}")
+        if "user not found" in error_msg:
+            return False
+        if "chat not found" in error_msg:
+            logger.error(f"⚠️ کانال {CHANNEL_ID} پیدا نشد! آیدی کانال را بررسی کنید.")
+            return True  # اگر کانال پیدا نشد، بات را بلاک نکنیم
+        return False
+
+    except TelegramError as e:
+        logger.error(f"⚠️ خطای تلگرام (کاربر {user_id}): {e}")
+        return False
+
+    except Exception as e:
+        logger.error(f"⚠️ خطای ناشناخته در بررسی عضویت (کاربر {user_id}): {e}")
+        return False
+
+
 async def send_join_message(update: Update, context=None):
+    """ارسال پیام الزام به عضویت با دکمه بررسی"""
     channel_url = f"https://t.me/{CHANNEL_ID.lstrip('@')}"
     join_button = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 عضویت در کانال", url=channel_url)],
         [InlineKeyboardButton("✅ بررسی عضویت", callback_data="check_membership")]
     ])
-    message = "⚠️ برای استفاده از ربات، ابتدا باید در کانال ما عضو شوید!"
+
+    message = (
+        "⚠️ برای استفاده از ربات، ابتدا باید در کانال ما عضو شوید!\n\n"
+        "📢 لطفاً روی دکمه زیر کلیک کرده و در کانال عضو شوید.\n\n"
+        f"🆔 آیدی کانال: {CHANNEL_ID}\n\n"
+        "✅ بعد از عضویت، روی دکمه «بررسی عضویت» کلیک کنید.\n\n"
+        "💡 نکته: اگر قبلاً عضو شده‌اید، روی دکمه بررسی عضویت کلیک کنید تا دوباره چک شود."
+    )
+
     if update.message:
-        await update.message.reply_text(message, reply_markup=join_button, disable_web_page_preview=True)
+        await update.message.reply_text(
+            message,
+            reply_markup=join_button,
+            disable_web_page_preview=True
+        )
     elif update.callback_query:
-        await update.callback_query.message.reply_text(message, reply_markup=join_button, disable_web_page_preview=True)
+        await update.callback_query.message.reply_text(
+            message,
+            reply_markup=join_button,
+            disable_web_page_preview=True
+        )
 
 # ==================== خروجی اکسل ====================
 def generate_excel_report():
@@ -380,18 +426,7 @@ assessment_questions = [
     ("need", "9️⃣ در یک جمله بگو امروز بیشتر از هر چیز به چه کمکی نیاز داری؟"),
     ("note", "🔟 آیا نکته‌ای هست که فکر می‌کنی برای شناخت بهتر تو باید بدانیم؟\n(اختیاری)")
 ]
-ASSESSMENT_INTRO = """🌱 ارزیابی اولیه شناختی سیناپس
-( برای تولد نسخه بهتر از تو )
 
-این چند تا سؤال، آزمون نیست و درستی و غلطی هم نداره.
-
-سیناپس فقط می‌خواد مثل یک آینه، تصویر شفاف ‌تری از جایی که امروز وایسادی رو بهت نشون بده.
-
-پس لطفا بدون تعارف و صادقانه جواب بده.
-هرچه پاسخ‌ ها واقعی ‌تر باشن، مسیر پیش رو هم روشن‌تر میشه. ♥️
-
-⸻
-"""
 # ==================== وضعیت کاربران ====================
 user_states = {}
 
@@ -536,691 +571,352 @@ async def handle_menu(update: Update, context):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
+    # بررسی عضویت
     if not await is_member_of_channel(user_id, context):
         await send_join_message(update, context)
         return
 
-    # --- لیدی لجستیک ---
-    logistics_forms = {
-        "💰 استعلام قیمت": """💰 **استعلام قیمت**\n\n🌱 برای بررسی هزینه و زمان تحویل، لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام کالا\n2️⃣ کشور مبدأ\n3️⃣ تعداد / وزن / حجم سفارش\n4️⃣ شهر مقصد\n5️⃣ HS Code (در صورت اطلاع)\n6️⃣ فاکتور خرید\n7️⃣ توضیحات تکمیلی""",
-        
-        "🌍 تأمین‌کننده خارجی": """🌍 **تأمین‌کننده خارجی**\n\n🌱 برای پیدا کردن تأمین‌کننده مناسب، لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام محصول\n2️⃣ کشور ترجیحی\n3️⃣ حجم یا تعداد\n4️⃣ هدف خرید\n5️⃣ توضیحات""",
-        
-        "📦 حمل و اسناد": """📦 **حمل و اسناد**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام کالا\n2️⃣ کشور مبدأ\n3️⃣ شهر مقصد\n4️⃣ وضعیت بار\n5️⃣ HS Code\n6️⃣ اسناد""",
-        
-        "📈 فروش و بازاریابی": """📈 **فروش و بازاریابی**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام شرکت/برند\n2️⃣ حوزه فعالیت\n3️⃣ شهر\n4️⃣ نوع نیروی موردنیاز\n5️⃣ شرح نیاز""",
-        
-        "🎓 آموزش واردات": """🎓 **آموزش واردات**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ تجربه واردات (بله/خیر)\n2️⃣ هدف\n3️⃣ محصول مورد علاقه\n4️⃣ چالش اصلی""",
-        
-        "🧭 مشاوره تخصصی": """🧭 **مشاوره تخصصی**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام و نام خانوادگی\n2️⃣ حوزه فعالیت\n3️⃣ موضوع مشاوره\n4️⃣ مسئله اصلی\n5️⃣ شماره تماس"""
-    }
-
-    if text in logistics_forms:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(ASSESSMENT_INTRO + assessment_questions[0][1], reply_markup=back_menu)
-            return
-        await update.message.reply_text(logistics_forms[text], reply_markup=back_menu)
-        await update.message.reply_text(
-            "🌱 درخواست شما ثبت شد.\n\nکارشناسان لیدی لجستیک حداکثر ظرف ۲ ساعت کاری با شما تماس خواهند گرفت.",
-            reply_markup=main_menu
-        )
-        return
-
-    # ==================== بخش‌های نیازمند ارزیابی ====================
-    assessment_needed = {
-        "👤 کارجو", "💼 فریلنسر", "🏢 کارفرما",
-        "🌟 برند شخصی", "🚀 برند محصولی", "🏛️ برند سازمانی",
-        "❤️ نیک‌اندیش داخل ایران", "🌍 نیک‌اندیش خارج ایران", "🤝 پروژه اجتماعی",
-        "🧠 توسعه فردی", "🎯 توسعه شغلی", "📈 توسعه اثر اجتماعی",
-        "🌱 محصولات سیناپس"
-    }
-
-    if text in assessment_needed:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(ASSESSMENT_INTRO + assessment_questions[0][1], reply_markup=back_menu)
-            return
-        await update.message.reply_text(f"✅ بخش {text} انتخاب شد.\n\nبه زودی خدمات فعال می‌شود.", reply_markup=back_menu)
-        return
-    # ==================== راهنما ====================
-    if text == "📖 راهنمای انتخاب مسیر":
-        guide_text = """📖 **راهنمای انتخاب مسیر**\n\nبه سیناپس خوش آمدی 🌱\n\nهر بخش را انتخاب کن تا مسیر مناسب خودت را پیدا کنی."""
-        await update.message.reply_text(guide_text, reply_markup=main_menu, parse_mode='Markdown')
-        return
-
-    # ==================== مشاوره هوشمند (Gemini) ====================
     state = get_user_state(user_id)
-    if state["section"] is None and text not in ["🔙 بازگشت به منوی اصلی"]:
-        if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ لطفاً ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
-            return
+    section = state.get("section")
+    step = state.get("step", 0)
+    temp = state.get("temp", {})
 
-        if client is None or GEMINI_API_KEY is None:
-            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.\nلطفاً با پشتیبانی تماس بگیرید.", reply_markup=back_menu)
-            return
-
-        user_info = get_user_info(user_id)
-        first_name = user_info.get('first_name', 'کاربر')
-
-        await update.message.reply_text("⏳ در حال پردازش...")
-
-        try:
-            user_context = f"""اطلاعات کاربر:
-نام: {first_name} {user_info.get('last_name', '')}
-کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}
-شهر: {user_info.get('city', 'ثبت نشده')}
-
-سوال کاربر: {text}"""
-
-            # روش جدید و مطمئن‌تر
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=[{"role": "user", "parts": [{"text": user_context}]}],
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.7,
-                    max_output_tokens=900,
-                )
-            )
-
-            await update.message.reply_text(
-                f"{first_name} عزیز،\n\n{response.text}",
-                reply_markup=back_menu
-            )
-            return
-
-        except Exception as e:
-            logger.error(f"Gemini Error: {e}", exc_info=True)
-            await update.message.reply_text(
-                "⚠️ مشکلی در اتصال به سرویس هوشمند رخ داد.\n"
-                "لطفاً چند ثانیه صبر کنید و دوباره سوالتان را بپرسید.",
-                reply_markup=back_menu
-            )
-            return
-
-    # ========== راهنمای انتخاب مسیر ==========
-    if text == "📖 راهنمای انتخاب مسیر":
-        guide_text = """📖 **راهنمای انتخاب مسیر**
-
-به سیناپس خوش اومدی. 🌱
-
-🟢 **بازار کار**
-اگر به دنبال شغل، پروژه یا درآمد یا جذب نیرو هستی.
-
-🔵 **کسب‌وکار**
-اگر می‌خواهی کسب‌وکارت را رشد بدهی یا مسئله‌ای را حل کنی.
-
-🟣 **مسئولیت اجتماعی**
-اگر می‌خواهی در کنار رشد خودت، اثری مثبت بر جامعه بگذاری.
-
-🟠 **مسیر رشد**
-اگر به دنبال خودشناسی و طراحی مسیر زندگی و شغلی هستی.
-
-🔴 **لیدی لجستیک**
-اگر می‌خواهی با فرصت‌ها و خدمات اکوسیستم لیدی لجستیک همراه شوی.
-
-🌱 **محصولات سیناپس**
-اگر می‌خواهی از ابزارها، دوره‌ها و خدمات سیناپس استفاده کنی.
-
-مسیر موردنظرت را انتخاب کن. 👇"""
-        
-        await update.message.reply_text(guide_text, reply_markup=main_menu, parse_mode='Markdown')
-        return
-    
-    # ========== بازار کار ==========
-    if text == "🟢 بازار کار":
-        await update.message.reply_text(
-            "🟢 **بازار کار**\n\n"
-            "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=market_menu
-        )
-        return
-    
-    if text in ["👤 کارجو", "💼 فریلنسر", "🏢 کارفرما"]:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=market_menu
-        )
-        return
-    
-    # ========== کسب‌وکار ==========
-    if text == "🔵 کسب‌وکار":
-        await update.message.reply_text(
-            "🔵 **کسب‌وکار**\n\n"
-            "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=business_menu
-        )
-        return
-    
-    if text in ["🌟 برند شخصی", "🚀 برند محصولی", "🏛️ برند سازمانی"]:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=business_menu
-        )
-        return
-    
-    # ========== مسئولیت اجتماعی ==========
-    if text == "🟣 مسئولیت اجتماعی":
-        await update.message.reply_text(
-            "🟣 **مسئولیت اجتماعی**\n\n"
-            "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=social_menu
-        )
-        return
-    
-    if text in ["❤️ نیک‌اندیش داخل ایران", "🌍 نیک‌اندیش خارج ایران", "🤝 پروژه اجتماعی"]:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=social_menu
-        )
-        return
-    
-    # ========== مسیر رشد ==========
-    if text == "🟠 مسیر رشد":
-        await update.message.reply_text(
-            "🟠 **مسیر رشد**\n\n"
-            "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=growth_menu
-        )
-        return
-    
-    if text in ["🧠 توسعه فردی", "🎯 توسعه شغلی", "📈 توسعه اثر اجتماعی"]:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=growth_menu
-        )
-        return
-    
-    # ========== لیدی لجستیک ==========
-    if text == "🔴 لیدی لجستیک":
-        await update.message.reply_text(
-            "🔴 **لیدی لجستیک**\n\n"
-            "لطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=logistics_menu
-        )
-        return
-    
-    if text in ["💰 استعلام قیمت", "🌍 تأمین‌کننده خارجی", "📦 حمل و اسناد", 
-                "📈 فروش و بازاریابی", "🎓 آموزش واردات", "🧭 مشاوره تخصصی"]:
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            f"✅ **شما گزینه '{text}' را انتخاب کردید.**\n\n"
-            f"به زودی خدمات مربوط به این بخش در دسترس قرار می‌گیرد.\n"
-            f"برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=logistics_menu
-        )
-        return
-    
-    # ========== محصولات سیناپس ==========
-    if text == "🌱 محصولات سیناپس":
-        if not has_completed_assessment(user_id):
-            clear_user_state(user_id)
-            set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                f"🌱 **ارزیابی اولیه سیناپس**\n\n"
-                f"قرار نیست در این چند سؤال قضاوت شوی یا آزمونی را پشت سر بگذاری.\n\n"
-                f"فقط می‌خواهیم تصویر شفاف‌تری از وضعیت امروزت داشته باشیم تا بتوانیم مسیر مناسب‌تری را پیشنهاد دهیم.♥️\n\n"
-                f"لطفاً با صداقت پاسخ بده.\n\n"
-                f"⸻\n\n"
-                f"{assessment_questions[0][1]}",
-                reply_markup=back_menu
-            )
-            return
-        
-        await update.message.reply_text(
-            "🌱 **محصولات سیناپس**\n\n"
-            "به زودی ابزارها، دوره‌ها و خدمات سیناپس در این بخش قرار می‌گیرند.\n"
-            "برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید.",
-            reply_markup=main_menu
-        )
-        return
-    
-    # ========== بازگشت به منوی اصلی ==========
+    # ===== بازگشت به منو =====
     if text == "🔙 بازگشت به منوی اصلی":
         clear_user_state(user_id)
+        await update.message.reply_text("🔹 به منوی اصلی بازگشتید 👇", reply_markup=main_menu)
+        return
+
+    # ===== منوهای اصلی =====
+    menus = {
+        "🟢 بازار کار": market_menu,
+        "🔵 کسب‌وکار": business_menu,
+        "🟣 مسئولیت اجتماعی": social_menu,
+        "🟠 مسیر رشد": growth_menu,
+        "🔴 لیدی لجستیک": logistics_menu,
+    }
+    if text in menus:
+        await update.message.reply_text(f"{text}\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:", reply_markup=menus[text])
+        return
+
+    # ===== لیدی لجستیک - زیرمجموعه‌ها =====
+    logistics_forms = {
+        "💰 استعلام قیمت": (
+            "💰 استعلام قیمت\n\n"
+            "🌱 برای بررسی هزینه و زمان تحویل، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ نام کالا\n"
+            "2️⃣ کشور مبدأ\n"
+            "3️⃣ تعداد / وزن / حجم سفارش\n"
+            "4️⃣ شهر مقصد\n"
+            "5️⃣ HS Code (در صورت اطلاع)\n"
+            "6️⃣ فاکتور خرید (Proforma Invoice) در صورت وجود\n"
+            "7️⃣ توضیحات تکمیلی\n\n"
+            "📎 اگر HS Code را نمی‌دانید، نام، تصویر یا کاتالوگ محصول را ارسال کنید.\n\n"
+            "⏰ کارشناسان لیدی لجستیک پس از بررسی با شما تماس خواهند گرفت."
+        ),
+        "🌍 تأمین‌کننده خارجی": (
+            "🌍 تأمین‌کننده خارجی\n\n"
+            "🌱 برای پیدا کردن تأمین‌کننده مناسب، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ نام محصول\n"
+            "2️⃣ کشور ترجیحی (در صورت وجود)\n"
+            "3️⃣ حجم یا تعداد موردنیاز\n"
+            "4️⃣ هدف شما از خرید چیست؟\n(مصرف شخصی / فروش / تولید)\n"
+            "5️⃣ توضیحات تکمیلی\n\n"
+            "📎 در صورت وجود، تصویر یا نمونه محصول را ارسال کنید.\n\n"
+            "⏰ پس از بررسی، تأمین‌کنندگان مناسب معرفی خواهند شد."
+        ),
+        "📦 حمل و اسناد": (
+            "📦 حمل و اسناد بازرگانی\n\n"
+            "🌱 برای بررسی شرایط حمل و امور اسنادی، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ نام کالا\n"
+            "2️⃣ کشور مبدأ\n"
+            "3️⃣ شهر مقصد\n"
+            "4️⃣ وضعیت فعلی بار\n(آماده حمل / در حال خرید / نیاز به مشاوره)\n"
+            "5️⃣ HS Code (در صورت اطلاع)\n"
+            "6️⃣ اسناد موجود\n(پروفرما، پکینگ لیست، بارنامه و …)\n"
+            "7️⃣ توضیحات تکمیلی\n\n"
+            "📎 ارسال اسناد موجود به بررسی سریع‌تر کمک می‌کند.\n\n"
+            "⏰ کارشناسان لیدی لجستیک درخواست شما را بررسی خواهند کرد."
+        ),
+        "📈 فروش و بازاریابی": (
+            "📈 فروش و بازاریابی\n\n"
+            "🌱 برای معرفی نیروهای فروش و توسعه بازار، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ نام شرکت یا برند\n"
+            "2️⃣ حوزه فعالیت\n"
+            "3️⃣ شهر فعالیت\n"
+            "4️⃣ نوع نیروی موردنیاز\n"
+            "5️⃣ شرح کوتاه نیاز شما\n"
+            "6️⃣ شماره تماس\n\n"
+            "⏰ پس از بررسی، پیشنهادهای مناسب ارائه خواهد شد."
+        ),
+        "🎓 آموزش واردات": (
+            "🎓 آموزش واردات\n\n"
+            "🌱 برای معرفی مناسب‌ترین مسیر آموزشی، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ آیا تجربه واردات دارید؟\n(بله / خیر)\n"
+            "2️⃣ هدف شما چیست؟\n(شروع واردات / توسعه کسب‌وکار / یادگیری تخصصی)\n"
+            "3️⃣ محصول یا صنعت موردعلاقه شما چیست؟\n"
+            "4️⃣ مهم‌ترین سوال یا چالش شما چیست؟\n\n"
+            "⏰ پس از بررسی، دوره یا مسیر آموزشی مناسب معرفی خواهد شد."
+        ),
+        "🧭 مشاوره تخصصی": (
+            "🧭 مشاوره تخصصی\n\n"
+            "🌱 برای هماهنگی جلسه مشاوره، لطفاً اطلاعات زیر را ارسال کنید:\n\n"
+            "1️⃣ نام و نام خانوادگی\n"
+            "2️⃣ حوزه فعالیت\n"
+            "3️⃣ موضوع مشاوره\n"
+            "4️⃣ مهم‌ترین مسئله یا سوال شما\n"
+            "5️⃣ تاکنون چه اقداماتی انجام داده‌اید؟\n"
+            "6️⃣ دوست دارید به چه نتیجه‌ای برسید؟\n"
+            "7️⃣ شماره تماس\n\n"
+            "⏰ پس از بررسی، زمان جلسه با شما هماهنگ خواهد شد."
+        ),
+    }
+    if text in logistics_forms:
+        set_user_state(user_id, "logistics_waiting", 0, {"service": text})
+        await update.message.reply_text(logistics_forms[text], reply_markup=back_menu)
         await update.message.reply_text(
-            "🔹 به منوی اصلی بازگشتید 👇",
+            "📝 لطفاً اطلاعات خواسته شده را در یک پیام ارسال کنید:",
+            reply_markup=back_menu
+        )
+        return
+
+    # ===== انتظار پاسخ لجستیک =====
+    if section == "logistics_waiting":
+        service = temp.get("service", "درخواست")
+        user_info = get_user_info(user_id)
+        first_name = user_info.get("first_name", "کاربر")
+        admin_msg = (
+            f"📋 درخواست جدید - {service}\n"
+            f"👤 {first_name} {user_info.get('last_name','')}\n"
+            f"🆔 {user_id}\n"
+            f"📱 {user_info.get('phone','')}\n\n"
+            f"💬 اطلاعات:\n{text}"
+        )
+        try:
+            await context.bot.send_message(ADMIN_ID, admin_msg)
+        except Exception:
+            pass
+        clear_user_state(user_id)
+        await update.message.reply_text(
+            "🌱 درخواست شما با موفقیت ثبت شد.\n\n"
+            "اطلاعات ارسال‌شده توسط کارشناسان لیدی لجستیک بررسی می‌شود و در اولین فرصت "
+            "برای هماهنگی و ارائه راهکار با شما تماس خواهیم گرفت.\n\n"
+            "⏰ زمان پاسخگویی: حداکثر ۲ ساعت کاری.",
             reply_markup=main_menu
         )
         return
-    
-    # ========== اطلاعات شخصی ==========
+
+    # ===== محصولات سیناپس =====
+    if text == "🌱 محصولات سیناپس":
+        await update.message.reply_text(
+            "🌱 محصولات سیناپس\n\n"
+            "به زودی ابزارها، دوره‌ها و خدمات سیناپس در این بخش قرار می‌گیرند.",
+            reply_markup=main_menu
+        )
+        return
+
+    # ===== راهنما =====
+    if text == "📖 راهنمای انتخاب مسیر":
+        await update.message.reply_text(
+            "📖 راهنمای انتخاب مسیر\n\n"
+            "🟢 بازار کار — دنبال شغل، پروژه یا جذب نیرو هستی\n"
+            "🔵 کسب‌وکار — می‌خواهی کسب‌وکارت را رشد بدهی\n"
+            "🟣 مسئولیت اجتماعی — اثر مثبت اجتماعی می‌خواهی\n"
+            "🟠 مسیر رشد — به دنبال خودشناسی و مسیر زندگی هستی\n"
+            "🔴 لیدی لجستیک — خدمات واردات و صادرات\n"
+            "🌱 محصولات سیناپس — ابزارها و دوره‌های آموزشی\n\n"
+            "مسیر موردنظرت را انتخاب کن 👇",
+            reply_markup=main_menu
+        )
+        return
+
+    # ===== اطلاعات شخصی =====
     if text == "🆔 اطلاعات شخصی":
         if is_user_registered(user_id):
             user_info = get_user_info(user_id)
-            first_name = user_info.get('first_name', '')
-            edit_keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ ویرایش اطلاعات", callback_data="edit_personal")]
-            ])
+            first_name = user_info.get("first_name", "")
+            edit_kb = InlineKeyboardMarkup([[InlineKeyboardButton("✏️ ویرایش اطلاعات", callback_data="edit_personal")]])
             await update.message.reply_text(
                 f"سلام {first_name} عزیز! 👋\n\n"
-                f"✅ اطلاعات شخصی شما قبلاً ثبت شده:\n\n"
-                f"👤 نام: {first_name} {user_info.get('last_name', '')}\n"
-                f"🏙️ شهر: {user_info.get('city', '')}\n"
-                f"📞 شماره: {user_info.get('phone', '')}\n\n"
-                f"برای ویرایش اطلاعات روی دکمه زیر کلیک کنید 👇",
-                reply_markup=edit_keyboard
+                f"✅ اطلاعات شما قبلاً ثبت شده:\n"
+                f"👤 {first_name} {user_info.get('last_name','')}\n"
+                f"🏙️ {user_info.get('city','')}\n"
+                f"📞 {user_info.get('phone','')}\n\n"
+                f"برای ویرایش روی دکمه کلیک کنید 👇",
+                reply_markup=edit_kb
             )
             return
-
         clear_user_state(user_id)
         set_user_state(user_id, "personal", 0, {})
-        await update.message.reply_text(
-            f"📝 ثبت اطلاعات شخصی\n\n{personal_info_questions[0][1]}",
-            reply_markup=back_menu
-        )
+        await update.message.reply_text(f"📝 ثبت اطلاعات شخصی\n\n{personal_info_questions[0][1]}", reply_markup=back_menu)
         return
-    
-    # ========== اطلاعات کسب و کار ==========
+
+    # ===== اطلاعات کسب و کار =====
     if text == "🏢 اطلاعات کسب و کار":
         if not is_user_registered(user_id):
-            await update.message.reply_text(
-                "⚠️ لطفاً ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.",
-                reply_markup=main_menu
-            )
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
             return
-        
-        user_info = get_user_info(user_id)
-        if is_business_registered(user_id):
-            await update.message.reply_text(
-                f"✅ **اطلاعات کسب و کار شما قبلاً ثبت شده:**\n\n"
-                f"🏢 نام کسب و کار: {user_info.get('business_name', '')}\n"
-                f"📍 آدرس: {user_info.get('address', '')}\n"
-                f"📢 راه معرفی: {user_info.get('referral_source', '')}\n\n"
-                f"برای ویرایش، اطلاعات جدید را وارد کنید 👇",
-                reply_markup=back_menu
-            )
-            clear_user_state(user_id)
-            set_user_state(user_id, "business", 0, {})
-            await update.message.reply_text(
-                f"✏️ **ویرایش اطلاعات کسب و کار**\n\n{business_info_questions[0][1]}",
-                parse_mode='Markdown'
-            )
-            return
-        
         clear_user_state(user_id)
         set_user_state(user_id, "business", 0, {})
-        await update.message.reply_text(
-            f"🏢 **ثبت اطلاعات کسب و کار**\n\n{business_info_questions[0][1]}",
-            reply_markup=back_menu,
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(f"🏢 ثبت اطلاعات کسب و کار\n\n{business_info_questions[0][1]}", reply_markup=back_menu)
         return
-    
-    # ========== پرسشنامه ==========
+
+    # ===== پرسشنامه =====
     if text == "📊 پرسشنامه تخصصی":
         if not is_user_registered(user_id):
-            await update.message.reply_text(
-                "⚠️ لطفاً ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.",
-                reply_markup=main_menu
-            )
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
             return
-        
-        if not is_business_registered(user_id):
-            await update.message.reply_text(
-                "⚠️ لطفاً ابتدا اطلاعات کسب و کار خود را ثبت کنید.\n"
-                "بخش '🏢 اطلاعات کسب و کار'",
-                reply_markup=main_menu
-            )
-            return
-        
-        surveys = read_json(SURVEY_FILE, {})
-        if str(user_id) in surveys and len(surveys[str(user_id)]) > 2:
-            await update.message.reply_text(
-                "✅ شما قبلاً پرسشنامه را تکمیل کرده‌اید.\n"
-                "از بخش '💬 مشاوره هوشمند' می‌توانید سوالات خود را بپرسید.",
-                reply_markup=main_menu
-            )
-            return
-        
         clear_user_state(user_id)
         set_user_state(user_id, "survey", 0, {})
-        await update.message.reply_text(
-            f"📋 **پرسشنامه تخصصی**\n\n{survey_questions[0][1]}",
-            reply_markup=back_menu,
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(f"📋 پرسشنامه تخصصی\n\n{survey_questions[0][1]}", reply_markup=back_menu)
         return
-    
-    # ========== مشاوره ==========
+
+    # ===== مشاوره هوشمند =====
     if text == "💬 مشاوره هوشمند":
         if not is_user_registered(user_id):
-            await update.message.reply_text(
-                "⚠️ لطفاً ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.",
-                reply_markup=main_menu
-            )
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
             return
-        await update.message.reply_text("💬 حالا هر سوالی داری بپرس...", reply_markup=back_menu)
-        return
-    state = get_user_state(user_id)
-    if state["section"] is None and text != "🔙 بازگشت به منوی اصلی":
-        if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.", reply_markup=main_menu)
-            return
-
-        if client is None:
-            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
-            return
-
-        user_info = get_user_info(user_id)
-        first_name = user_info.get('first_name', 'کاربر')
-
-        await update.message.reply_text("⏳ در حال پردازش...")
-
-        try:
-            user_context = f"""اطلاعات کاربر:
-نام: {first_name} {user_info.get('last_name', '')}
-کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}
-شهر: {user_info.get('city', 'ثبت نشده')}
-
-سوال: {text}"""
-
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=[user_context],
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.7,
-                    max_output_tokens=900,
-                )
-            )
-            
-            await update.message.reply_text(
-                f"{first_name} عزیز،\n\n{response.text}",
-                reply_markup=back_menu
-            )
-            return
-
-        except Exception as e:
-            logger.error(f"خطا در Gemini: {e}", exc_info=True)
-            await update.message.reply_text(
-                f"⚠️ {first_name} عزیز، در حال حاضر مشکلی در ارتباط با سرویس هوشمند وجود دارد.\n"
-                "لطفاً چند ثانیه صبر کنید و دوباره امتحان کنید.",
-                reply_markup=back_menu
-            )
-            return
-        
         await update.message.reply_text(
-            "💬 **مشاوره هوشمند**\n\n"
-            "سلام! من مریم هستم، مشاور کسب و کار شما.\n"
-            "هر سوالی درباره برندسازی، بازاریابی، فروش و... داری بپرس.\n\n"
-            "📌 برای بازگشت به منو، روی دکمه زیر کلیک کن 👇",
-            reply_markup=back_menu,
-            parse_mode='Markdown'
-        )
-        return
-    
-    # ========== ارسال فیش پرداخت ==========
-    if text == "💳 ارسال فیش پرداخت":
-        clear_user_state(user_id)
-        set_user_state(user_id, "waiting_receipt", 0, {"section": "manual"})
-        await update.message.reply_text(
-            "💳 پنل ارسال فیش پرداخت\n\n"
-            "لطفاً تصویر فیش واریزی خود را ارسال کنید.\n\n"
-            "📌 نکات مهم:\n"
-            "• تصویر باید واضح و خوانا باشد\n"
-            "• مبلغ و تاریخ باید مشخص باشد\n"
-            "• بعد از ارسال، حداکثر ۲۴ ساعت بررسی خواهد شد\n\n"
-            "📸 همین الان تصویر فیش را ارسال کنید 👇",
+            "💬 مشاوره هوشمند\n\nهر سوالی درباره برندسازی، بازاریابی، فروش و... داری بپرس 👇",
             reply_markup=back_menu
         )
         return
 
-    
-        support_text = f"""📞 **ارتباط با پشتیبانی**
-
-به تیم پشتیبانی ما خوش آمدید! 🎯
-
-📱 **شماره تماس:** {SUPPORT_INFO['phone']}
-📧 **ایمیل:** {SUPPORT_INFO['email']}
-🆔 **آیدی تلگرام:** {SUPPORT_INFO['telegram']}
-⏰ **ساعات پاسخگویی:** {SUPPORT_INFO['hours']}
-⏱ **زمان پاسخگویی:** {SUPPORT_INFO['response_time']}
-
-───────────────────
-💬 **نکات مهم:**
-• لطفاً قبل از تماس، شماره و نام خود را آماده داشته باشید
-• در صورت نیاز به مشاوره فوری، از بخش 'مشاوره هوشمند' استفاده کنید
-• پیام‌های پشتیبانی حداکثر ۲۴ ساعت پاسخ داده می‌شوند
-
-برای بازگشت به منوی اصلی، روی دکمه زیر کلیک کنید 👇"""
-        
+    # ===== ارسال فیش =====
+    if text == "💳 ارسال فیش پرداخت":
+        clear_user_state(user_id)
+        set_user_state(user_id, "waiting_receipt", 0, {})
         await update.message.reply_text(
-            support_text,
-            reply_markup=back_menu,
-            parse_mode='Markdown'
+            "💳 پنل ارسال فیش پرداخت\n\n"
+            "📸 تصویر فیش واریزی خود را ارسال کنید.\n\n"
+            "• تصویر باید واضح و خوانا باشد\n"
+            "• مبلغ و تاریخ باید مشخص باشد\n"
+            "• بعد از ارسال حداکثر ۲۴ ساعت بررسی می‌شود",
+            reply_markup=back_menu
         )
         return
-    
-    # ========== پردازش پاسخ‌ها ==========
-    state = get_user_state(user_id)
-    section = state["section"]
-    step = state["step"]
-    temp = state["temp"]
-    
-    # ===== پردازش فرم ارزیابی =====
+
+    # ===== پشتیبانی =====
+    if text == "📞 ارتباط با پشتیبانی":
+        await update.message.reply_text(
+            f"📞 ارتباط با پشتیبانی\n\n"
+            f"📱 شماره تماس: {SUPPORT_INFO['phone']}\n"
+            f"🆔 آیدی تلگرام: {SUPPORT_INFO['telegram']}\n"
+            f"⏰ ساعات پاسخگویی: {SUPPORT_INFO['hours']}",
+            reply_markup=back_menu
+        )
+        return
+
+    # ===== پردازش فرم‌های مرحله‌ای =====
+
     if section == "assessment":
         if step < len(assessment_questions):
             field_name, _ = assessment_questions[step]
             temp[field_name] = text
-            
             if step + 1 < len(assessment_questions):
                 set_user_state(user_id, "assessment", step + 1, temp)
-                _, next_q = assessment_questions[step + 1]
-                await update.message.reply_text(next_q, reply_markup=back_menu)
+                await update.message.reply_text(assessment_questions[step + 1][1], reply_markup=back_menu)
             else:
                 save_assessment(user_id, temp)
                 await notify_admin(context, user_id, temp, "assessment")
                 clear_user_state(user_id)
-                
-                final_message = f"""🌱 **ممنون که با حوصله به سؤال‌ها پاسخ دادی.**
-
-پاسخ‌های تو توسط سیناپس بررسی می‌شود تا تصویری شفاف‌تر از وضعیت فعلی، ظرفیت‌ها، گره‌های مسیر و فرصت‌های رشدت ترسیم شود.
-
-📊 **گزارش شناخت سیناپس شامل:**
-
-✨ آنچه امروز از تو می‌بینیم
-✨ نقاط قوت و ظرفیت‌ها
-✨ گره‌های اصلی مسیر
-✨ فرصت‌های رشد
-✨ پیشنهاد گام بعدی
-
-⏰ حداکثر تا ۲۴ ساعت آینده آماده می‌شود.
-
-💳 **هزینه تهیه گزارش شناخت: ۲۵۰ هزار تومان**
-
-💳 **شماره کارت:** به نام مریم شهبازی
-
-📸 پس از پرداخت و ضمیمه فایل اسکرین شات، فرآیند بررسی آغاز خواهد شد.
-
-🔹 به منوی اصلی بازگشتید 👇"""
-                
                 await update.message.reply_text(
-                    final_message,
-                    reply_markup=main_menu,
-                    parse_mode='Markdown'
+                    "🌱 ممنون که با حوصله پاسخ دادی.\n\n"
+                    "📊 گزارش شناخت سیناپس شامل:\n"
+                    "✨ آنچه امروز از تو می‌بینیم\n"
+                    "✨ نقاط قوت و ظرفیت‌ها\n"
+                    "✨ گره‌ها و موانع مسیر\n"
+                    "✨ فرصت‌های رشد\n"
+                    "✨ پیشنهاد گام بعدی\n\n"
+                    "⏰ زمان تحویل: حداکثر ۲۴ ساعت\n"
+                    "💳 هزینه گزارش شناخت: ۲۵۰ هزار تومان\n\n"
+                    "پس از پرداخت، فیش را از طریق «💳 ارسال فیش پرداخت» ارسال کنید.",
+                    reply_markup=main_menu
                 )
         return
-    
-    # ===== پردازش اطلاعات شخصی =====
+
     if section == "personal":
         if step < len(personal_info_questions):
             field_name, _ = personal_info_questions[step]
             temp[field_name] = text
-            
             if step + 1 < len(personal_info_questions):
                 set_user_state(user_id, "personal", step + 1, temp)
-                _, next_q = personal_info_questions[step + 1]
-                await update.message.reply_text(next_q, reply_markup=back_menu)
+                await update.message.reply_text(personal_info_questions[step + 1][1], reply_markup=back_menu)
             else:
                 summary = get_info_summary(temp, "personal")
                 set_user_state(user_id, "personal_confirm", 0, temp)
-                await update.message.reply_text(
-                    summary,
-                    reply_markup=get_confirm_keyboard(),
-                    parse_mode='Markdown'
-                )
+                await update.message.reply_text(summary, reply_markup=get_confirm_keyboard(), parse_mode="Markdown")
         return
-    
-    # ===== پردازش اطلاعات کسب و کار =====
+
     if section == "business":
         if step < len(business_info_questions):
             field_name, _ = business_info_questions[step]
             temp[field_name] = text
-            
             if step + 1 < len(business_info_questions):
                 set_user_state(user_id, "business", step + 1, temp)
-                _, next_q = business_info_questions[step + 1]
-                await update.message.reply_text(next_q, reply_markup=back_menu)
+                await update.message.reply_text(business_info_questions[step + 1][1], reply_markup=back_menu)
             else:
                 summary = get_info_summary(temp, "business")
                 set_user_state(user_id, "business_confirm", 0, temp)
-                await update.message.reply_text(
-                    summary,
-                    reply_markup=get_confirm_keyboard(),
-                    parse_mode='Markdown'
-                )
+                await update.message.reply_text(summary, reply_markup=get_confirm_keyboard(), parse_mode="Markdown")
         return
-    
-    # ===== پردازش پرسشنامه =====
+
     if section == "survey":
         if step < len(survey_questions):
             field_name, _ = survey_questions[step]
             temp[field_name] = text
-            
             if step + 1 < len(survey_questions):
                 set_user_state(user_id, "survey", step + 1, temp)
-                _, next_q = survey_questions[step + 1]
-                await update.message.reply_text(next_q, reply_markup=back_menu)
+                await update.message.reply_text(survey_questions[step + 1][1], reply_markup=back_menu)
             else:
                 for key, value in temp.items():
                     save_survey_answer(user_id, key, value)
                 clear_user_state(user_id)
-                
                 await update.message.reply_text(
-                    "🌹 **با تشکر از شما!** 🌹\n\n"
-                    "پرسشنامه شما با موفقیت ثبت شد.\n"
-                    "✅ **ظرف ۴۸ ساعت آینده کارشناسان ما با شما تماس می‌گیرند.**\n\n"
-                    "🔹 به منوی اصلی بازگشتید 👇",
-                    reply_markup=main_menu,
-                    parse_mode='Markdown'
+                    "🌹 ممنون! پرسشنامه با موفقیت ثبت شد.\n\n"
+                    "✅ ظرف ۴۸ ساعت کارشناسان با شما تماس می‌گیرند.",
+                    reply_markup=main_menu
                 )
         return
-    
-    # ========== گفتگو با Gemini ==========
-    if state["section"] is None and text not in ["🔙 بازگشت به منوی اصلی"]:
-        if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
-            return
-        if client is None:
-            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
-            return
 
-        user_info = get_user_info(user_id)
-        first_name = user_info.get('first_name', 'کاربر')
-        await update.message.reply_text("⏳ در حال پردازش...")
+    if section == "waiting_receipt":
+        await update.message.reply_text("📸 لطفاً تصویر فیش را ارسال کنید.", reply_markup=back_menu)
+        return
 
-        try:
-            user_context = f"""اطلاعات کاربر:
-نام: {first_name} {user_info.get('last_name', '')}
-کسب و کار: {user_info.get('business_name', 'ثبت نشده')}
-شهر: {user_info.get('city', 'ثبت نشده')}
+    # ===== مشاوره هوشمند Gemini =====
+    if not is_user_registered(user_id):
+        await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+        return
 
-سوال کاربر: {text}"""
+    if client is None:
+        await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
+        return
 
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=[user_context],   # ← اینجا اصلاح شد
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=0.7,
-                    max_output_tokens=800,
-                )
-            )
-            await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
-        except Exception as e:
-            logger.error(f"خطا در Gemini: {e}", exc_info=True)
-            await update.message.reply_text("⚠️ مشکلی در سرویس هوشمند پیش آمد. لطفاً دوباره امتحان کنید.", reply_markup=back_menu)
+    user_info = get_user_info(user_id)
+    first_name = user_info.get("first_name", "کاربر")
+    await update.message.reply_text("⏳ در حال پردازش...")
+    try:
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"اطلاعات کاربر:\n"
+            f"نام: {first_name} {user_info.get('last_name','')}\n"
+            f"کسب‌وکار: {user_info.get('business_name','ثبت نشده')}\n"
+            f"شهر: {user_info.get('city','ثبت نشده')}\n\n"
+            f"سوال کاربر: {text}"
+        )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
+    except Exception as e:
+        logger.error(f"Gemini Error: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"⚠️ {first_name} عزیز، سرویس هوشمند موقتاً با مشکل مواجه شد.\n"
+            f"خطا: {str(e)[:100]}\n\n"
+            "لطفاً دوباره امتحان کنید.",
+            reply_markup=back_menu
+        )
 
 # ==================== دکمه‌های اینلاین ====================
 async def handle_callback(update: Update, context):
