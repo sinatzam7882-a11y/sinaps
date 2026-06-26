@@ -598,8 +598,8 @@ async def handle_menu(update: Update, context):
             await update.message.reply_text("⚠️ لطفاً ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
             return
 
-        if client is None:
-            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
+        if client is None or GEMINI_API_KEY is None:
+            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.\nلطفاً با پشتیبانی تماس بگیرید.", reply_markup=back_menu)
             return
 
         user_info = get_user_info(user_id)
@@ -615,16 +615,21 @@ async def handle_menu(update: Update, context):
 
 سوال کاربر: {text}"""
 
+            # روش جدید و مطمئن‌تر
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=[user_context],
+                contents=[{"role": "user", "parts": [{"text": user_context}]}],
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
                     temperature=0.7,
                     max_output_tokens=900,
                 )
             )
-            await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
+
+            await update.message.reply_text(
+                f"{first_name} عزیز،\n\n{response.text}",
+                reply_markup=back_menu
+            )
             return
 
         except Exception as e:
