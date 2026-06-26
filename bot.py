@@ -23,7 +23,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "8065571732"))
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@synapse_os")
 
-# بررسی توکن بات
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN در متغیرهای محیطی تنظیم نشده است!")
 
@@ -78,7 +77,6 @@ def write_json(file_path, data):
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# ==================== توابع ذخیره ====================
 def save_user_info(user_id, info):
     users = read_json(USERS_FILE, {})
     if str(user_id) not in users:
@@ -126,72 +124,26 @@ def has_completed_assessment(user_id):
     assessments = read_json(ASSESSMENT_FILE, {})
     return str(user_id) in assessments and len(assessments[str(user_id)]) > 5
 
-# ==================== توابع بررسی عضویت ====================
+# ==================== بررسی عضویت ====================
 async def is_member_of_channel(user_id, context):
-    """بررسی عضویت کاربر در کانال با روش مطمئن"""
     try:
-        chat_member = await context.bot.get_chat_member(
-            chat_id=CHANNEL_ID,
-            user_id=user_id
-        )
+        chat_member = await context.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         valid_statuses = ['member', 'administrator', 'creator']
-        is_member = chat_member.status in valid_statuses
-        logger.info(f"{'✅' if is_member else '❌'} کاربر {user_id} - وضعیت کانال: {chat_member.status}")
-        return is_member
-
-    except Forbidden as e:
-        # بات ادمین کانال نیست یا دسترسی ندارد
-        logger.warning(f"⛔ بات به کانال دسترسی ندارد (کاربر {user_id}): {e}")
-        # اگر بات ادمین کانال نباشد، فرض می‌کنیم کاربر عضو است تا ربات کار کند
+        return chat_member.status in valid_statuses
+    except:
         return True
 
-    except BadRequest as e:
-        error_msg = str(e).lower()
-        logger.error(f"❌ درخواست نامعتبر (کاربر {user_id}): {e}")
-        if "user not found" in error_msg:
-            return False
-        if "chat not found" in error_msg:
-            logger.error(f"⚠️ کانال {CHANNEL_ID} پیدا نشد! آیدی کانال را بررسی کنید.")
-            return True  # اگر کانال پیدا نشد، بات را بلاک نکنیم
-        return False
-
-    except TelegramError as e:
-        logger.error(f"⚠️ خطای تلگرام (کاربر {user_id}): {e}")
-        return False
-
-    except Exception as e:
-        logger.error(f"⚠️ خطای ناشناخته در بررسی عضویت (کاربر {user_id}): {e}")
-        return False
-
-
 async def send_join_message(update: Update, context=None):
-    """ارسال پیام الزام به عضویت با دکمه بررسی"""
     channel_url = f"https://t.me/{CHANNEL_ID.lstrip('@')}"
     join_button = InlineKeyboardMarkup([
         [InlineKeyboardButton("📢 عضویت در کانال", url=channel_url)],
         [InlineKeyboardButton("✅ بررسی عضویت", callback_data="check_membership")]
     ])
-
-    message = (
-        "⚠️ برای استفاده از ربات، ابتدا باید در کانال ما عضو شوید!\n\n"
-        "📢 لطفاً روی دکمه زیر کلیک کرده و در کانال عضو شوید.\n\n"
-        f"🆔 آیدی کانال: {CHANNEL_ID}\n\n"
-        "✅ بعد از عضویت، روی دکمه «بررسی عضویت» کلیک کنید.\n\n"
-        "💡 نکته: اگر قبلاً عضو شده‌اید، روی دکمه بررسی عضویت کلیک کنید تا دوباره چک شود."
-    )
-
+    message = "⚠️ برای استفاده از ربات، ابتدا باید در کانال ما عضو شوید!"
     if update.message:
-        await update.message.reply_text(
-            message,
-            reply_markup=join_button,
-            disable_web_page_preview=True
-        )
+        await update.message.reply_text(message, reply_markup=join_button, disable_web_page_preview=True)
     elif update.callback_query:
-        await update.callback_query.message.reply_text(
-            message,
-            reply_markup=join_button,
-            disable_web_page_preview=True
-        )
+        await update.callback_query.message.reply_text(message, reply_markup=join_button, disable_web_page_preview=True)
 
 # ==================== خروجی اکسل ====================
 def generate_excel_report():
@@ -428,7 +380,18 @@ assessment_questions = [
     ("need", "9️⃣ در یک جمله بگو امروز بیشتر از هر چیز به چه کمکی نیاز داری؟"),
     ("note", "🔟 آیا نکته‌ای هست که فکر می‌کنی برای شناخت بهتر تو باید بدانیم؟\n(اختیاری)")
 ]
+ASSESSMENT_INTRO = """🌱 ارزیابی اولیه شناختی سیناپس
+( برای تولد نسخه بهتر از تو )
 
+این چند تا سؤال، آزمون نیست و درستی و غلطی هم نداره.
+
+سیناپس فقط می‌خواد مثل یک آینه، تصویر شفاف ‌تری از جایی که امروز وایسادی رو بهت نشون بده.
+
+پس لطفا بدون تعارف و صادقانه جواب بده.
+هرچه پاسخ‌ ها واقعی ‌تر باشن، مسیر پیش رو هم روشن‌تر میشه. ♥️
+
+⸻
+"""
 # ==================== وضعیت کاربران ====================
 user_states = {}
 
@@ -569,17 +532,135 @@ def get_info_summary(info, section_type):
     return ""
 
 # ==================== پردازش منو ====================
+# ==================== پردازش منو ====================
 async def handle_menu(update: Update, context):
     user_id = update.effective_user.id
     text = update.message.text
-    
-    # ========== بررسی عضویت در کانال ==========
-    is_member = await is_member_of_channel(user_id, context)
-    
-    if not is_member:
+
+    if not await is_member_of_channel(user_id, context):
         await send_join_message(update, context)
         return
-    
+
+    # ========== لیدی لجستیک ==========
+    logistics_forms = {
+        "💰 استعلام قیمت": """💰 **استعلام قیمت**
+
+🌱 برای بررسی هزینه و زمان تحویل، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ نام کالا
+2️⃣ کشور مبدأ
+3️⃣ تعداد / وزن / حجم سفارش
+4️⃣ شهر مقصد
+5️⃣ HS Code (در صورت اطلاع)
+6️⃣ فاکتور خرید (Proforma Invoice) در صورت وجود
+7️⃣ توضیحات تکمیلی
+
+📎 اگر HS Code را نمی‌دانید، نام، تصویر یا کاتالوگ محصول را ارسال کنید.""",
+
+        "🌍 تأمین‌کننده خارجی": """🌍 **تأمین‌کننده خارجی**
+
+🌱 برای پیدا کردن تأمین‌کننده مناسب، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ نام محصول
+2️⃣ کشور ترجیحی (در صورت وجود)
+3️⃣ حجم یا تعداد موردنیاز
+4️⃣ هدف شما از خرید چیست؟ (مصرف شخصی / فروش / تولید)
+5️⃣ توضیحات تکمیلی
+
+📎 در صورت وجود، تصویر یا نمونه محصول را ارسال کنید.""",
+
+        "📦 حمل و اسناد": """📦 **حمل و اسناد بازرگانی**
+
+🌱 برای بررسی شرایط حمل و امور اسنادی، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ نام کالا
+2️⃣ کشور مبدأ
+3️⃣ شهر مقصد
+4️⃣ وضعیت فعلی بار (آماده حمل / در حال خرید / نیاز به مشاوره)
+5️⃣ HS Code (در صورت اطلاع)
+6️⃣ اسناد موجود
+7️⃣ توضیحات تکمیلی""",
+
+        "📈 فروش و بازاریابی": """📈 **فروش و بازاریابی**
+
+🌱 برای معرفی نیروهای فروش و توسعه بازار، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ نام شرکت یا برند
+2️⃣ حوزه فعالیت
+3️⃣ شهر فعالیت
+4️⃣ نوع نیروی موردنیاز
+5️⃣ شرح کوتاه نیاز شما
+6️⃣ شماره تماس""",
+
+        "🎓 آموزش واردات": """🎓 **آموزش واردات**
+
+🌱 برای معرفی مناسب‌ترین مسیر آموزشی، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ آیا تجربه واردات دارید؟ (بله / خیر)
+2️⃣ هدف شما چیست؟
+3️⃣ محصول یا صنعت موردعلاقه شما چیست؟
+4️⃣ مهم‌ترین سوال یا چالش شما چیست؟""",
+
+        "🧭 مشاوره تخصصی": """🧭 **مشاوره تخصصی**
+
+🌱 برای هماهنگی جلسه مشاوره، لطفاً اطلاعات زیر را ارسال کنید:
+
+1️⃣ نام و نام خانوادگی
+2️⃣ حوزه فعالیت
+3️⃣ موضوع مشاوره
+4️⃣ مهم‌ترین مسئله یا سوال شما
+5️⃣ تاکنون چه اقداماتی انجام داده‌اید؟
+6️⃣ دوست دارید به چه نتیجه‌ای برسید؟
+7️⃣ شماره تماس"""
+    }
+
+    if text == "🔴 لیدی لجستیک":
+        await update.message.reply_text(
+            "🔴 **لیدی لجستیک**\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
+            reply_markup=logistics_menu
+        )
+        return
+
+    if text in logistics_forms:
+        if not has_completed_assessment(user_id):
+            clear_user_state(user_id)
+            set_user_state(user_id, "assessment", 0, {})
+            await update.message.reply_text(
+                ASSESSMENT_INTRO + assessment_questions[0][1],
+                reply_markup=back_menu
+            )
+            return
+        
+        await update.message.reply_text(logistics_forms[text], reply_markup=back_menu)
+        await update.message.reply_text(
+            "🌱 درخواست شما با موفقیت ثبت شد.\n\n"
+            "اطلاعات ارسال‌شده توسط کارشناسان لیدی لجستیک بررسی می‌شود و در اولین فرصت برای هماهنگی و ارائه راهکار با شما تماس خواهند گرفت.\n"
+            "⏰ زمان پاسخگویی: حداکثر 2 ساعت کاری.",
+            reply_markup=main_menu
+        )
+        return
+
+    # ========== بخش‌هایی که نیاز به ارزیابی اولیه دارند ==========
+    assessment_needed = {
+        "👤 کارجو", "💼 فریلنسر", "🏢 کارفرما",
+        "🌟 برند شخصی", "🚀 برند محصولی", "🏛️ برند سازمانی",
+        "❤️ نیک‌اندیش داخل ایران", "🌍 نیک‌اندیش خارج ایران", "🤝 پروژه اجتماعی",
+        "🧠 توسعه فردی", "🎯 توسعه شغلی", "📈 توسعه اثر اجتماعی",
+        "🌱 محصولات سیناپس"
+    }
+
+    if text in assessment_needed:
+        if not has_completed_assessment(user_id):
+            clear_user_state(user_id)
+            set_user_state(user_id, "assessment", 0, {})
+            await update.message.reply_text(
+                ASSESSMENT_INTRO + assessment_questions[0][1],
+                reply_markup=back_menu
+            )
+            return
+        await update.message.reply_text(f"✅ بخش {text} انتخاب شد.\n\nبه زودی خدمات این بخش فعال خواهد شد.", reply_markup=back_menu)
+        return
+
     # ========== راهنمای انتخاب مسیر ==========
     if text == "📖 راهنمای انتخاب مسیر":
         guide_text = """📖 **راهنمای انتخاب مسیر**
@@ -1078,52 +1159,39 @@ async def handle_menu(update: Update, context):
         return
     
     # ========== گفتگو با Gemini ==========
-    if state["section"] is None:
+    if state["section"] is None and text not in ["🔙 بازگشت به منوی اصلی"]:
         if not is_user_registered(user_id):
-            await update.message.reply_text(
-                "⚠️ لطفاً ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.",
-                reply_markup=main_menu
-            )
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
             return
-
         if client is None:
-            await update.message.reply_text(
-                "⚠️ سرویس مشاوره هوشمند موقتاً در دسترس نیست.\n"
-                "لطفاً با پشتیبانی تماس بگیرید.",
-                reply_markup=back_menu
-            )
+            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
             return
 
         user_info = get_user_info(user_id)
         first_name = user_info.get('first_name', 'کاربر')
         await update.message.reply_text("⏳ در حال پردازش...")
+
         try:
-            user_context = (
-                f"اطلاعات کاربر:\n"
-                f"نام: {first_name} {user_info.get('last_name', '')}\n"
-                f"کسب و کار: {user_info.get('business_name', 'ثبت نشده')}\n"
-                f"شهر: {user_info.get('city', 'ثبت نشده')}\n\n"
-                f"سوال کاربر: {text}"
-            )
+            user_context = f"""اطلاعات کاربر:
+نام: {first_name} {user_info.get('last_name', '')}
+کسب و کار: {user_info.get('business_name', 'ثبت نشده')}
+شهر: {user_info.get('city', 'ثبت نشده')}
+
+سوال کاربر: {text}"""
+
             response = client.models.generate_content(
                 model="gemini-1.5-flash",
-                contents=user_context,
+                contents=[user_context],   # ← اینجا اصلاح شد
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
                     temperature=0.7,
+                    max_output_tokens=800,
                 )
             )
-            await update.message.reply_text(
-                f"{first_name} عزیز،\n\n{response.text}",
-                reply_markup=back_menu
-            )
+            await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
         except Exception as e:
-            logger.error(f"خطا در Gemini: {e}")
-            await update.message.reply_text(
-                f"⚠️ {first_name} عزیز، در حال حاضر مشکلی در ارتباط با سرویس هوشمند وجود دارد.\n"
-                "لطفاً چند دقیقه دیگر دوباره امتحان کنید.",
-                reply_markup=back_menu
-            )
+            logger.error(f"خطا در Gemini: {e}", exc_info=True)
+            await update.message.reply_text("⚠️ مشکلی در سرویس هوشمند پیش آمد. لطفاً دوباره امتحان کنید.", reply_markup=back_menu)
 
 # ==================== دکمه‌های اینلاین ====================
 async def handle_callback(update: Update, context):
