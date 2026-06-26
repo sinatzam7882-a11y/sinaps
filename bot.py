@@ -532,115 +532,43 @@ def get_info_summary(info, section_type):
     return ""
 
 # ==================== پردازش منو ====================
-# ==================== پردازش منو ====================
 async def handle_menu(update: Update, context):
     user_id = update.effective_user.id
-    text = update.message.text
+    text = update.message.text.strip()
 
     if not await is_member_of_channel(user_id, context):
         await send_join_message(update, context)
         return
 
-    # ========== لیدی لجستیک ==========
+    # --- لیدی لجستیک ---
     logistics_forms = {
-        "💰 استعلام قیمت": """💰 **استعلام قیمت**
-
-🌱 برای بررسی هزینه و زمان تحویل، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ نام کالا
-2️⃣ کشور مبدأ
-3️⃣ تعداد / وزن / حجم سفارش
-4️⃣ شهر مقصد
-5️⃣ HS Code (در صورت اطلاع)
-6️⃣ فاکتور خرید (Proforma Invoice) در صورت وجود
-7️⃣ توضیحات تکمیلی
-
-📎 اگر HS Code را نمی‌دانید، نام، تصویر یا کاتالوگ محصول را ارسال کنید.""",
-
-        "🌍 تأمین‌کننده خارجی": """🌍 **تأمین‌کننده خارجی**
-
-🌱 برای پیدا کردن تأمین‌کننده مناسب، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ نام محصول
-2️⃣ کشور ترجیحی (در صورت وجود)
-3️⃣ حجم یا تعداد موردنیاز
-4️⃣ هدف شما از خرید چیست؟ (مصرف شخصی / فروش / تولید)
-5️⃣ توضیحات تکمیلی
-
-📎 در صورت وجود، تصویر یا نمونه محصول را ارسال کنید.""",
-
-        "📦 حمل و اسناد": """📦 **حمل و اسناد بازرگانی**
-
-🌱 برای بررسی شرایط حمل و امور اسنادی، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ نام کالا
-2️⃣ کشور مبدأ
-3️⃣ شهر مقصد
-4️⃣ وضعیت فعلی بار (آماده حمل / در حال خرید / نیاز به مشاوره)
-5️⃣ HS Code (در صورت اطلاع)
-6️⃣ اسناد موجود
-7️⃣ توضیحات تکمیلی""",
-
-        "📈 فروش و بازاریابی": """📈 **فروش و بازاریابی**
-
-🌱 برای معرفی نیروهای فروش و توسعه بازار، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ نام شرکت یا برند
-2️⃣ حوزه فعالیت
-3️⃣ شهر فعالیت
-4️⃣ نوع نیروی موردنیاز
-5️⃣ شرح کوتاه نیاز شما
-6️⃣ شماره تماس""",
-
-        "🎓 آموزش واردات": """🎓 **آموزش واردات**
-
-🌱 برای معرفی مناسب‌ترین مسیر آموزشی، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ آیا تجربه واردات دارید؟ (بله / خیر)
-2️⃣ هدف شما چیست؟
-3️⃣ محصول یا صنعت موردعلاقه شما چیست؟
-4️⃣ مهم‌ترین سوال یا چالش شما چیست؟""",
-
-        "🧭 مشاوره تخصصی": """🧭 **مشاوره تخصصی**
-
-🌱 برای هماهنگی جلسه مشاوره، لطفاً اطلاعات زیر را ارسال کنید:
-
-1️⃣ نام و نام خانوادگی
-2️⃣ حوزه فعالیت
-3️⃣ موضوع مشاوره
-4️⃣ مهم‌ترین مسئله یا سوال شما
-5️⃣ تاکنون چه اقداماتی انجام داده‌اید؟
-6️⃣ دوست دارید به چه نتیجه‌ای برسید؟
-7️⃣ شماره تماس"""
+        "💰 استعلام قیمت": """💰 **استعلام قیمت**\n\n🌱 برای بررسی هزینه و زمان تحویل، لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام کالا\n2️⃣ کشور مبدأ\n3️⃣ تعداد / وزن / حجم سفارش\n4️⃣ شهر مقصد\n5️⃣ HS Code (در صورت اطلاع)\n6️⃣ فاکتور خرید\n7️⃣ توضیحات تکمیلی""",
+        
+        "🌍 تأمین‌کننده خارجی": """🌍 **تأمین‌کننده خارجی**\n\n🌱 برای پیدا کردن تأمین‌کننده مناسب، لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام محصول\n2️⃣ کشور ترجیحی\n3️⃣ حجم یا تعداد\n4️⃣ هدف خرید\n5️⃣ توضیحات""",
+        
+        "📦 حمل و اسناد": """📦 **حمل و اسناد**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام کالا\n2️⃣ کشور مبدأ\n3️⃣ شهر مقصد\n4️⃣ وضعیت بار\n5️⃣ HS Code\n6️⃣ اسناد""",
+        
+        "📈 فروش و بازاریابی": """📈 **فروش و بازاریابی**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام شرکت/برند\n2️⃣ حوزه فعالیت\n3️⃣ شهر\n4️⃣ نوع نیروی موردنیاز\n5️⃣ شرح نیاز""",
+        
+        "🎓 آموزش واردات": """🎓 **آموزش واردات**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ تجربه واردات (بله/خیر)\n2️⃣ هدف\n3️⃣ محصول مورد علاقه\n4️⃣ چالش اصلی""",
+        
+        "🧭 مشاوره تخصصی": """🧭 **مشاوره تخصصی**\n\n🌱 لطفاً اطلاعات زیر را ارسال کنید:\n\n1️⃣ نام و نام خانوادگی\n2️⃣ حوزه فعالیت\n3️⃣ موضوع مشاوره\n4️⃣ مسئله اصلی\n5️⃣ شماره تماس"""
     }
-
-    if text == "🔴 لیدی لجستیک":
-        await update.message.reply_text(
-            "🔴 **لیدی لجستیک**\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-            reply_markup=logistics_menu
-        )
-        return
 
     if text in logistics_forms:
         if not has_completed_assessment(user_id):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
-            await update.message.reply_text(
-                ASSESSMENT_INTRO + assessment_questions[0][1],
-                reply_markup=back_menu
-            )
+            await update.message.reply_text(ASSESSMENT_INTRO + assessment_questions[0][1], reply_markup=back_menu)
             return
-        
         await update.message.reply_text(logistics_forms[text], reply_markup=back_menu)
         await update.message.reply_text(
-            "🌱 درخواست شما با موفقیت ثبت شد.\n\n"
-            "اطلاعات ارسال‌شده توسط کارشناسان لیدی لجستیک بررسی می‌شود و در اولین فرصت برای هماهنگی و ارائه راهکار با شما تماس خواهند گرفت.\n"
-            "⏰ زمان پاسخگویی: حداکثر 2 ساعت کاری.",
+            "🌱 درخواست شما ثبت شد.\n\nکارشناسان لیدی لجستیک حداکثر ظرف ۲ ساعت کاری با شما تماس خواهند گرفت.",
             reply_markup=main_menu
         )
         return
 
-    # ========== بخش‌هایی که نیاز به ارزیابی اولیه دارند ==========
+    # ==================== بخش‌های نیازمند ارزیابی ====================
     assessment_needed = {
         "👤 کارجو", "💼 فریلنسر", "🏢 کارفرما",
         "🌟 برند شخصی", "🚀 برند محصولی", "🏛️ برند سازمانی",
@@ -653,13 +581,60 @@ async def handle_menu(update: Update, context):
         if not has_completed_assessment(user_id):
             clear_user_state(user_id)
             set_user_state(user_id, "assessment", 0, {})
+            await update.message.reply_text(ASSESSMENT_INTRO + assessment_questions[0][1], reply_markup=back_menu)
+            return
+        await update.message.reply_text(f"✅ بخش {text} انتخاب شد.\n\nبه زودی خدمات فعال می‌شود.", reply_markup=back_menu)
+        return
+    # ==================== راهنما ====================
+    if text == "📖 راهنمای انتخاب مسیر":
+        guide_text = """📖 **راهنمای انتخاب مسیر**\n\nبه سیناپس خوش آمدی 🌱\n\nهر بخش را انتخاب کن تا مسیر مناسب خودت را پیدا کنی."""
+        await update.message.reply_text(guide_text, reply_markup=main_menu, parse_mode='Markdown')
+        return
+
+    # ==================== مشاوره هوشمند (Gemini) ====================
+    state = get_user_state(user_id)
+    if state["section"] is None and text not in ["🔙 بازگشت به منوی اصلی"]:
+        if not is_user_registered(user_id):
+            await update.message.reply_text("⚠️ لطفاً ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            return
+
+        if client is None:
+            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
+            return
+
+        user_info = get_user_info(user_id)
+        first_name = user_info.get('first_name', 'کاربر')
+
+        await update.message.reply_text("⏳ در حال پردازش...")
+
+        try:
+            user_context = f"""اطلاعات کاربر:
+نام: {first_name} {user_info.get('last_name', '')}
+کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}
+شهر: {user_info.get('city', 'ثبت نشده')}
+
+سوال کاربر: {text}"""
+
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=[user_context],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.7,
+                    max_output_tokens=900,
+                )
+            )
+            await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
+            return
+
+        except Exception as e:
+            logger.error(f"Gemini Error: {e}", exc_info=True)
             await update.message.reply_text(
-                ASSESSMENT_INTRO + assessment_questions[0][1],
+                "⚠️ مشکلی در اتصال به سرویس هوشمند رخ داد.\n"
+                "لطفاً چند ثانیه صبر کنید و دوباره سوالتان را بپرسید.",
                 reply_markup=back_menu
             )
             return
-        await update.message.reply_text(f"✅ بخش {text} انتخاب شد.\n\nبه زودی خدمات این بخش فعال خواهد شد.", reply_markup=back_menu)
-        return
 
     # ========== راهنمای انتخاب مسیر ==========
     if text == "📖 راهنمای انتخاب مسیر":
@@ -988,6 +963,55 @@ async def handle_menu(update: Update, context):
             await update.message.reply_text(
                 "⚠️ لطفاً ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.",
                 reply_markup=main_menu
+            )
+            return
+        await update.message.reply_text("💬 حالا هر سوالی داری بپرس...", reply_markup=back_menu)
+        return
+    state = get_user_state(user_id)
+    if state["section"] is None and text != "🔙 بازگشت به منوی اصلی":
+        if not is_user_registered(user_id):
+            await update.message.reply_text("⚠️ ابتدا در بخش '🆔 اطلاعات شخصی' ثبت‌نام کنید.", reply_markup=main_menu)
+            return
+
+        if client is None:
+            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
+            return
+
+        user_info = get_user_info(user_id)
+        first_name = user_info.get('first_name', 'کاربر')
+
+        await update.message.reply_text("⏳ در حال پردازش...")
+
+        try:
+            user_context = f"""اطلاعات کاربر:
+نام: {first_name} {user_info.get('last_name', '')}
+کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}
+شهر: {user_info.get('city', 'ثبت نشده')}
+
+سوال: {text}"""
+
+            response = client.models.generate_content(
+                model="gemini-1.5-flash",
+                contents=[user_context],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.7,
+                    max_output_tokens=900,
+                )
+            )
+            
+            await update.message.reply_text(
+                f"{first_name} عزیز،\n\n{response.text}",
+                reply_markup=back_menu
+            )
+            return
+
+        except Exception as e:
+            logger.error(f"خطا در Gemini: {e}", exc_info=True)
+            await update.message.reply_text(
+                f"⚠️ {first_name} عزیز، در حال حاضر مشکلی در ارتباط با سرویس هوشمند وجود دارد.\n"
+                "لطفاً چند ثانیه صبر کنید و دوباره امتحان کنید.",
+                reply_markup=back_menu
             )
             return
         
