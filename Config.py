@@ -1,5 +1,8 @@
 # ==================== فایل تنظیمات اصلی بات سیناپس ====================
 # این فایل شامل: متغیرهای محیطی، اتصال Gemini، توابع JSON و ذخیره‌سازی است
+# نکته: این فایل تغییر ساختاری نسبت به قبل نداشته و فقط برای پشتیبانی از
+# فرم‌های جدید (برند شخصی/محصولی/سازمانی، مسئولیت اجتماعی، مسیر رشد)
+# یک فایل JSON و یک تابع ذخیره‌سازی جدید به آن اضافه شده است.
 
 import os
 import json
@@ -51,6 +54,9 @@ except Exception as e:
 USERS_FILE = "users.json"
 SURVEY_FILE = "survey.json"
 ASSESSMENT_FILE = "assessment.json"
+# فایل جدید: ذخیره پاسخ‌های فرم‌های برند شخصی/محصولی/سازمانی،
+# مسئولیت اجتماعی و مسیر رشد (همه این فرم‌ها در اینجا ذخیره می‌شوند)
+SECTION_FORMS_FILE = "section_forms.json"
 EXCEL_FILE = "users_data.xlsx"
 
 # ==================== اطلاعات پشتیبانی ====================
@@ -110,6 +116,33 @@ def save_survey_answer(user_id, section, answer):
     surveys[str(user_id)][section] = answer
     surveys[str(user_id)]["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     write_json(SURVEY_FILE, surveys)
+
+def save_section_form(user_id, form_type, sub_title, qs, answers):
+    """
+    ذخیره پاسخ‌های فرم‌های بخش‌های مختلف (کسب‌وکار، مسئولیت اجتماعی، مسیر رشد) در JSON.
+    هر بار که کاربر یکی از این فرم‌ها را کامل می‌کند، یک رکورد جدید
+    به لیست فرم‌های همان کاربر اضافه می‌شود (چون ممکن است کاربر چند زیربخش
+    مختلف را پر کند، مثلاً هم برند شخصی و هم توسعه شغلی).
+
+    form_type: یکی از "business" / "social" / "growth"
+    sub_title: عنوان زیربخش، مثلاً "🌟 برند شخصی"
+    qs: لیست متن سوالات همان فرم
+    answers: لیست پاسخ‌های کاربر (به همان ترتیب سوالات)
+    """
+    data = read_json(SECTION_FORMS_FILE, {})
+    if str(user_id) not in data:
+        data[str(user_id)] = []
+
+    record = {
+        "form_type": form_type,
+        "sub_title": sub_title,
+        "qa": [{"question": q, "answer": a} for q, a in zip(qs, answers)],
+        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    data[str(user_id)].append(record)
+    write_json(SECTION_FORMS_FILE, data)
+    logger.info(f"✅ فرم «{sub_title}» کاربر {user_id} ذخیره شد")
+    return True
 
 def get_user_info(user_id):
     """دریافت اطلاعات یک کاربر خاص"""
