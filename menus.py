@@ -5,18 +5,19 @@
 from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 # ==================== منوی اصلی ====================
-# توجه: دکمه «محصولات و خدمات سیناپس» طبق درخواست به ردیف اول و به‌صورت
-# تمام‌عرض (تک‌دکمه در یک ردیف) منتقل شد تا بزرگ‌تر و در اولین نگاه دیده شود.
-# دکمه «💎 خرید اشتراک» هم زیر آن قرار گرفت چون کلید ورود به امکانات هوشمند است.
+# توجه: طبق درخواست، فقط دکمه‌ی «محصولات و خدمات سیناپس» تک و تمام‌عرض
+# (یعنی بزرگ‌تر از بقیه) است. تمام دکمه‌های دیگر دوتا-دوتا در یک ردیف
+# قرار گرفته‌اند تا نسبت به آن کوچک‌تر و معمولی دیده شوند.
 main_menu = ReplyKeyboardMarkup([
     [KeyboardButton("🌱 محصولات و خدمات سیناپس 🌱")],
-    [KeyboardButton("💎 خرید اشتراک"), KeyboardButton("📞 ارتباط با پشتیبانی")],
-    [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار"), KeyboardButton("🟣 مسئولیت اجتماعی")],
-    [KeyboardButton("🟠 مسیر رشد"), KeyboardButton("🔴 لیدی لجستیک")],
-    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📁 درخواست پروژه"), KeyboardButton("🎨 طراحی بنر")],
-    [KeyboardButton("📖 راهنمای انتخاب مسیر"), KeyboardButton("🆔 اطلاعات شخصی")],
-    [KeyboardButton("🏢 اطلاعات کسب و کار"), KeyboardButton("📊 پرسشنامه تخصصی")],
-    [KeyboardButton("💳 ارسال فیش پرداخت")],
+    [KeyboardButton("💎 خرید اشتراک"), KeyboardButton("🔴 لیدی لجستیک")],
+    [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار")],
+    [KeyboardButton("🟣 مسئولیت اجتماعی"), KeyboardButton("🟠 مسیر رشد")],
+    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📁 درخواست پروژه")],
+    [KeyboardButton("🎨 طراحی بنر"), KeyboardButton("📖 راهنمای انتخاب مسیر")],
+    [KeyboardButton("🆔 اطلاعات شخصی"), KeyboardButton("🏢 اطلاعات کسب و کار")],
+    [KeyboardButton("📊 پرسشنامه تخصصی"), KeyboardButton("📞 ارتباط با پشتیبانی")],
+    [KeyboardButton("💳 ارسال فیش پرداخت")]
 ], resize_keyboard=True)
 
 # ==================== منوی بازار کار ====================
@@ -104,3 +105,23 @@ def get_phone_request_keyboard():
         [KeyboardButton("📱 ارسال خودکار شماره تماس", request_contact=True)],
         [KeyboardButton("🔙 بازگشت به منوی اصلی")]
     ], resize_keyboard=True)
+
+# ==================== پنل پیشرفته‌ی ادمین (فقط برای ADMIN_ID نمایش داده می‌شود) ====================
+def get_admin_panel_keyboard():
+    """
+    دکمه‌های شیشه‌ای پنل مدیریت: دریافت اکسل، آمار، سفارش‌های در انتظار،
+    جستجوی کاربر و ارسال پیام همگانی - بدون نیاز به حفظ کردن دستورهای متنی.
+    """
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 دریافت اکسل", callback_data="admin_panel_excel"),
+            InlineKeyboardButton("📈 آمار کلی", callback_data="admin_panel_stats"),
+        ],
+        [
+            InlineKeyboardButton("⏳ سفارش‌های در انتظار", callback_data="admin_panel_pending"),
+            InlineKeyboardButton("🔍 جستجوی کاربر", callback_data="admin_panel_find"),
+        ],
+        [
+            InlineKeyboardButton("📢 ارسال پیام همگانی", callback_data="admin_panel_broadcast"),
+        ],
+    ])

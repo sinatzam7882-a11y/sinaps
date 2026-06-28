@@ -36,7 +36,7 @@ logger.info(f"👑 ادمین: {ADMIN_ID}")
 # نکته: عمداً عدد دقیق تومان اینجا گذاشته نشده. هر وقت قیمت نهایی را
 # مشخص کردید، فقط مقدار رشته‌ی زیر را عوض کنید (مثلاً "350,000 تومان")
 # و بات بدون هیچ تغییر دیگری از مقدار جدید استفاده می‌کند.
-BRONZE_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"   # 👈 اینجا قیمت برنزی را بنویسید
+BRONZE_SUBSCRIPTION_PRICE = "۹۹ هزار تومان"   # 💰 قیمت نهایی اشتراک برنزی
 SILVER_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"   # (سطح نقره‌ای - فعلاً غیرفعال)
 GOLD_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"     # (سطح طلایی - فعلاً غیرفعال)
 
@@ -117,6 +117,10 @@ ASSESSMENT_FILE = "assessment.json"
 SECTION_FORMS_FILE = "section_forms.json"
 # فایل جدید: وضعیت اشتراک هر کاربر (فعال/منقضی/در انتظار تایید)
 SUBSCRIPTIONS_FILE = "subscriptions.json"
+# فایل جدید: سفارش‌های آزاد ثبت‌شده از تب «محصولات و خدمات سیناپس»
+PRODUCT_ORDERS_FILE = "product_orders.json"
+# فایل جدید: لیست آیدی تلگرام کاربران مسدودشده توسط ادمین
+BANNED_USERS_FILE = "banned_users.json"
 EXCEL_FILE = "users_data.xlsx"
 
 # ==================== اطلاعات پشتیبانی ====================
@@ -230,6 +234,24 @@ def get_user_info(user_id):
     users = read_json(USERS_FILE, {})
     return users.get(str(user_id), {})
 
+def save_product_order(user_id, order_text):
+    """
+    ذخیره‌ی سفارش آزاد کاربر از تب «🌱 محصولات و خدمات سیناپس».
+    هر کاربر می‌تواند چند سفارش مختلف بدهد، پس هر سفارش به‌صورت یک
+    رکورد جدید به لیست سفارش‌های همان کاربر اضافه می‌شود (نه جای‌گزین قبلی).
+    """
+    data = read_json(PRODUCT_ORDERS_FILE, {})
+    if str(user_id) not in data:
+        data[str(user_id)] = []
+    data[str(user_id)].append({
+        "order_text": order_text,
+        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "در انتظار بررسی",
+    })
+    write_json(PRODUCT_ORDERS_FILE, data)
+    logger.info(f"🌱 سفارش جدید از کاربر {user_id} در محصولات و خدمات سیناپس ثبت شد")
+    return True
+
 def is_user_registered(user_id):
     """بررسی اینکه آیا کاربر اطلاعات شخصی ثبت کرده یا نه"""
     users = read_json(USERS_FILE, {})
@@ -337,6 +359,85 @@ def reject_subscription(user_id):
     _save_subscription(user_id, record)
     logger.info(f"❌ درخواست اشتراک کاربر {user_id} رد شد")
     return record
+
+# ════════════════════════════════════════════════════════════════
+# 🛠 توابع پنل پیشرفته‌ی ادمین (مسدودسازی، جستجو، سفارش‌های در انتظار)
+# ════════════════════════════════════════════════════════════════
+
+# ---------- مسدودسازی کاربر ----------
+def is_user_banned(user_id):
+    """بررسی اینکه آیا کاربر توسط ادمین مسدود شده یا نه"""
+    banned = read_json(BANNED_USERS_FILE, [])
+    return str(user_id) in banned
+
+def ban_user(user_id):
+    """مسدود کردن یک کاربر خاص - دیگر هیچ پیامی از بات دریافت نمی‌کند"""
+    banned = read_json(BANNED_USERS_FILE, [])
+    uid = str(user_id)
+    if uid not in banned:
+        banned.append(uid)
+        write_json(BANNED_USERS_FILE, banned)
+    logger.info(f"🚫 کاربر {user_id} توسط ادمین مسدود شد")
+    return True
+
+def unban_user(user_id):
+    """رفع مسدودیت یک کاربر"""
+    banned = read_json(BANNED_USERS_FILE, [])
+    uid = str(user_id)
+    if uid in banned:
+        banned.remove(uid)
+        write_json(BANNED_USERS_FILE, banned)
+        logger.info(f"✅ مسدودیت کاربر {user_id} رفع شد")
+        return True
+    return False
+
+# ---------- جستجوی کاربر ----------
+def search_users(query, limit=10):
+    """
+    جستجوی کاربران بر اساس نام، نام خانوادگی، نام کسب‌وکار یا شماره تماس.
+    جستجو غیرحساس به بزرگ/کوچک بودن حروف و به‌صورت شامل‌شدن (substring) است.
+    خروجی: لیستی از (user_id, info) برای حداکثر `limit` نتیجه‌ی اول.
+    """
+    users = read_json(USERS_FILE, {})
+    query_norm = query.strip().lower()
+    if not query_norm:
+        return []
+
+    results = []
+    for user_id, info in users.items():
+        haystack = " ".join(str(info.get(field, "")) for field in [
+            "first_name", "last_name", "full_name", "business_name", "phone",
+            "telegram_username", "telegram_id",
+        ]).lower()
+        if query_norm in haystack:
+            results.append((user_id, info))
+        if len(results) >= limit:
+            break
+    return results
+
+# ---------- موارد در انتظار بررسی (سفارش‌ها + درخواست‌های اشتراک) ----------
+def get_pending_items():
+    """
+    خلاصه‌ی همه‌ی موارد در انتظار بررسی ادمین را برمی‌گرداند:
+    - سفارش‌های محصول/خدمت که هنوز وضعیت 'در انتظار بررسی' دارند
+    - درخواست‌های اشتراک که هنوز وضعیت 'pending' دارند
+    خروجی: dict با کلیدهای 'orders' و 'subscriptions'، هرکدام لیستی از تاپل‌هاست.
+    """
+    product_orders = read_json(PRODUCT_ORDERS_FILE, {})
+    subscriptions = read_json(SUBSCRIPTIONS_FILE, {})
+
+    pending_orders = []
+    for user_id, orders in product_orders.items():
+        for order in orders:
+            if order.get("status") == "در انتظار بررسی":
+                pending_orders.append((user_id, order))
+
+    pending_subs = []
+    for user_id, record in subscriptions.items():
+        if record.get("status") == "pending":
+            pending_subs.append((user_id, record))
+
+    return {"orders": pending_orders, "subscriptions": pending_subs}
 
 # ==================== مدیریت وضعیت (State) کاربران ====================
 user_states = {}

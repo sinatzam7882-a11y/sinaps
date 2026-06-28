@@ -19,7 +19,7 @@ from config import (
     get_user_state, set_user_state, clear_user_state,
     get_user_info, is_user_registered, save_assessment,
     save_survey_answer, save_section_form, has_active_subscription,
-    get_subscription,
+    get_subscription, save_product_order, is_user_banned,
 )
 from menus import (
     main_menu, market_menu, business_menu, social_menu,
@@ -35,7 +35,10 @@ from texts_section_forms import (
     BUSINESS_QUESTIONS, SOCIAL_QUESTIONS, GROWTH_QUESTIONS,
     BUSINESS_END_MSG, SOCIAL_END_MSG, GROWTH_END_MSG,
 )
-from texts_products_logistics import SYNAPSE_PRODUCTS_MSG, LOGISTICS_FORMS
+from texts_products_logistics import (
+    SYNAPSE_PRODUCTS_MSG, LOGISTICS_FORMS,
+    PRODUCT_ORDER_CONFIRM_MSG, build_admin_product_order_notice,
+)
 from texts_subscription import SUBSCRIPTION_REQUIRED_MSG, build_subscription_status_line
 from texts_features import (
     project_request_questions, PROJECT_REQUEST_PHONE_FIELDS,
@@ -74,6 +77,13 @@ async def handle_menu_text_value(update: Update, context, text: str):
     """پردازش تمام پیام‌های متنی کاربر - منو، فرم‌ها و مشاوره هوشمند"""
     user_id = update.effective_user.id
 
+    # 🚫 کاربر مسدود، هیچ پاسخی دریافت نمی‌کند
+    if is_user_banned(user_id):
+        await update.message.reply_text(
+            "🚫 شما توسط مدیریت مسدود شده‌اید و امکان استفاده از این بات را ندارید."
+        )
+        return
+
     # بررسی عضویت قبل از هر اقدامی
     if not await is_member_of_channel(user_id, context):
         await send_join_message(update, context)
@@ -83,6 +93,35 @@ async def handle_menu_text_value(update: Update, context, text: str):
     section = state.get("section")
     step = state.get("step", 0)
     temp = state.get("temp", {})
+
+    # ════════════════════════════════════════════════════════════
+    # 🛠 پردازش پیام‌های بعدی پنل ادمین (جستجوی کاربر / پیام همگانی)
+    # این دو حالت فقط زمانی فعال می‌شوند که ادمین روی دکمه‌ی مربوطه در
+    # پنل مدیریت کلیک کرده باشد (در handlers_admin_panel.py تنظیم می‌شود)
+    # ════════════════════════════════════════════════════════════
+    if user_id == ADMIN_ID and section == "admin_find_waiting":
+        from excel_and_admin import build_search_results_text
+        clear_user_state(user_id)
+        await update.message.reply_text(build_search_results_text(text), parse_mode='Markdown')
+        return
+
+    if user_id == ADMIN_ID and section == "admin_broadcast_waiting":
+        from config import read_json, USERS_FILE
+        clear_user_state(user_id)
+        users = read_json(USERS_FILE, {})
+        if not users:
+            await update.message.reply_text("📭 هیچ کاربری ثبت نشده!", reply_markup=main_menu)
+            return
+        await update.message.reply_text(f"📤 ارسال پیام به {len(users)} کاربر...")
+        success = 0
+        for uid in users.keys():
+            try:
+                await context.bot.send_message(chat_id=int(uid), text=f"📢 پیام از طرف مدیریت:\n\n{text}")
+                success += 1
+            except Exception:
+                pass
+        await update.message.reply_text(f"✅ پیام به {success} کاربر ارسال شد.", reply_markup=main_menu)
+        return
 
     # ===== بازگشت به منوی اصلی =====
     if text == "🔙 بازگشت به منوی اصلی":
@@ -135,32 +174,28 @@ async def handle_menu_text_value(update: Update, context, text: str):
         )
         return
 
-    # ===== محصولات و خدمات سیناپس =====
+    # ===== محصولات و خدمات سیناپس - نمایش لیست + شروع دریافت سفارش آزاد =====
+    # نکته: بدون نیاز به اشتراک یا حتی ثبت‌نام؛ هر کاربری می‌تواند سفارش بدهد.
     if text == "🌱 محصولات و خدمات سیناپس 🌱":
+        clear_user_state(user_id)
+        set_user_state(user_id, "product_order_waiting", 0, {})
+        await update.message.reply_text(SYNAPSE_PRODUCTS_MSG, reply_markup=back_menu)
+        return
+
+    # ===== دریافت متن سفارش و ارسال به ادمین =====
+    if section == "product_order_waiting":
+        save_product_order(user_id, text)
         user_info = get_user_info(user_id)
-        first_name = user_info.get("first_name", "کاربر")
+        first_name = user_info.get("first_name", "")
         last_name = user_info.get("last_name", "")
-        username = update.effective_user.username or "ندارد"
-        # اطلاع‌رسانی به ادمین
-        admin_notice = (
-            f"🌱 درخواست محصولات و خدمات سیناپس\n\n"
-            f"👤 {first_name} {last_name}\n"
-            f"🆔 آیدی عددی: {user_id}\n"
-            f"📱 یوزرنیم: @{username}\n\n"
-            f"کاربر روی «محصولات و خدمات سیناپس» کلیک کرد و منتظر پاسخ است."
-        )
+        phone = user_info.get("phone", "")
+        admin_msg = build_admin_product_order_notice(user_id, first_name, last_name, phone, text)
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_notice)
-        except Exception as e:
-            logger.error(f"خطا در ارسال نوتیفیکیشن محصولات به ادمین: {e}")
-        # پیام انتظار به کاربر
-        await update.message.reply_text(
-            "🌱 محصولات و خدمات سیناپس\n\n"
-            "درخواست شما ثبت شد. 🌟\n"
-            "کارشناسان سیناپس به زودی با اطلاعات کامل محصولات و خدمات با شما در ارتباط خواهند بود.\n\n"
-            "⏰ زمان پاسخگویی: حداکثر چند دقیقه",
-            reply_markup=main_menu
-        )
+            await context.bot.send_message(ADMIN_ID, admin_msg)
+        except Exception:
+            pass
+        clear_user_state(user_id)
+        await update.message.reply_text(PRODUCT_ORDER_CONFIRM_MSG, reply_markup=main_menu)
         return
 
     # ===== 💎 خرید اشتراک =====
@@ -306,11 +341,12 @@ async def handle_menu_text_value(update: Update, context, text: str):
         return
 
     # ════════════════════════════════════════════════════════════
-    # 🔒 از اینجا به بعد سه قابلیتی هستند که پشت اشتراک قفل شده‌اند:
-    # 💬 مشاوره هوشمند | 📁 درخواست پروژه | 🎨 طراحی بنر
+    # 🔒 طبق درخواست، اشتراک فقط برای این دو قابلیت لازم است:
+    # 💬 مشاوره هوشمند | 🎨 طراحی بنر
+    # 📁 درخواست پروژه آزاد است و اشتراک نمی‌خواهد (فقط ثبت‌نام پایه لازم است)
     # ════════════════════════════════════════════════════════════
 
-    # ===== 💬 مشاوره هوشمند =====
+    # ===== 💬 مشاوره هوشمند (نیاز به اشتراک) =====
     if text == "💬 مشاوره هوشمند":
         if not is_user_registered(user_id):
             await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
@@ -318,13 +354,17 @@ async def handle_menu_text_value(update: Update, context, text: str):
         if not has_active_subscription(user_id):
             await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
             return
+        # 💡 وضعیت کاربر را مشخصاً «در حال گفتگو با هوش مصنوعی» می‌کنیم تا
+        # فقط پیام‌های داخل همین گفتگو به Gemini فرستاده شوند، نه هر متن
+        # نامشخص دیگری که کاربر هرجای دیگری از بات تایپ کند.
+        set_user_state(user_id, "ai_chat", 0, {})
         await update.message.reply_text(
             "💬 مشاوره هوشمند\n\nهر سوالی درباره برندسازی، بازاریابی، فروش و... داری بپرس 👇",
             reply_markup=back_menu
         )
         return
 
-    # ===== 📁 شروع فرم درخواست پروژه =====
+    # ===== 📁 شروع فرم درخواست پروژه (آزاد - بدون نیاز به اشتراک) =====
     if text == "📁 درخواست پروژه":
         if not is_user_registered(user_id):
             await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
@@ -468,42 +508,53 @@ async def handle_menu_text_value(update: Update, context, text: str):
         return
 
     # ===== مشاوره هوشمند Gemini (پردازش سوال آزاد) =====
-    # توجه: اگر به این نقطه رسیدیم یعنی کاربر در حالت back_menu بعد از ورود
-    # به «💬 مشاوره هوشمند» سوال آزاد می‌پرسد. بررسی اشتراک را اینجا هم
-    # تکرار می‌کنیم تا اگر اشتراک در همین فاصله منقضی شد، اجازه ندهیم.
-    if not is_user_registered(user_id):
-        await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+    # توجه: این بخش فقط زمانی اجرا می‌شود که وضعیت کاربر دقیقاً "ai_chat"
+    # باشد (یعنی واقعاً از دکمه‌ی «💬 مشاوره هوشمند» وارد شده). این کار
+    # عمداً انجام شد تا هر پیام نامشخص دیگری (مثلاً تایپ اشتباه در منوی
+    # اصلی) به‌غلط با پیام «نیاز به اشتراک دارید» مسدود نشود.
+    if section == "ai_chat":
+        if not is_user_registered(user_id):
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            return
+
+        if not has_active_subscription(user_id):
+            await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
+            return
+
+        if client is None:
+            await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
+            return
+
+        user_info = get_user_info(user_id)
+        first_name = user_info.get("first_name", "کاربر")
+        await update.message.reply_text("⏳ در حال پردازش...")
+        try:
+            prompt = (
+                f"{SYSTEM_PROMPT}\n\n"
+                f"اطلاعات کاربر:\n"
+                f"نام: {first_name} {user_info.get('last_name', '')}\n"
+                f"کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}\n"
+                f"شهر: {user_info.get('city', 'ثبت نشده')}\n\n"
+                f"سوال کاربر: {text}"
+            )
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
+        except Exception as e:
+            logger.error(f"Gemini Error: {e}", exc_info=True)
+            await update.message.reply_text(
+                f"⚠️ {first_name} عزیز، سرویس هوشمند موقتاً با مشکل مواجه شد.\n"
+                f"خطا: {str(e)[:100]}\n\nلطفاً دوباره امتحان کنید.",
+                reply_markup=back_menu
+            )
         return
 
-    if not has_active_subscription(user_id):
-        await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
-        return
-
-    if client is None:
-        await update.message.reply_text("⚠️ سرویس هوشمند موقتاً در دسترس نیست.", reply_markup=back_menu)
-        return
-
-    user_info = get_user_info(user_id)
-    first_name = user_info.get("first_name", "کاربر")
-    await update.message.reply_text("⏳ در حال پردازش...")
-    try:
-        prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"اطلاعات کاربر:\n"
-            f"نام: {first_name} {user_info.get('last_name', '')}\n"
-            f"کسب‌وکار: {user_info.get('business_name', 'ثبت نشده')}\n"
-            f"شهر: {user_info.get('city', 'ثبت نشده')}\n\n"
-            f"سوال کاربر: {text}"
-        )
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        await update.message.reply_text(f"{first_name} عزیز،\n\n{response.text}", reply_markup=back_menu)
-    except Exception as e:
-        logger.error(f"Gemini Error: {e}", exc_info=True)
-        await update.message.reply_text(
-            f"⚠️ {first_name} عزیز، سرویس هوشمند موقتاً با مشکل مواجه شد.\n"
-            f"خطا: {str(e)[:100]}\n\nلطفاً دوباره امتحان کنید.",
-            reply_markup=back_menu
-        )
+    # ===== هیچ‌کدام از موارد بالا مچ نشد: پیام نامشخص در حالت آزاد =====
+    # این پیام عمداً به اشتراک هیچ اشاره‌ای نمی‌کند، چون اینجا یعنی کاربر
+    # صرفاً یک متن نامرتبط تایپ کرده، نه اینکه قابلیتی خاص نیاز به اشتراک دارد.
+    await update.message.reply_text(
+        "🤔 متوجه نشدم. لطفاً یکی از گزینه‌های منو را انتخاب کنید 👇",
+        reply_markup=main_menu
+    )

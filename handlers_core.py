@@ -11,10 +11,11 @@ from config import (
     CHANNEL_ID, ADMIN_ID, logger,
     get_user_state, set_user_state, clear_user_state,
     get_user_info, is_user_registered, save_user_info,
-    save_telegram_identity,
+    save_telegram_identity, get_subscription, is_user_banned,
 )
 from menus import main_menu, back_menu, get_confirm_keyboard
 from texts_profile import personal_info_questions, business_info_questions
+from texts_subscription import build_subscription_status_line
 
 # ==================== بررسی عضویت کاربر در کانال ====================
 async def is_member_of_channel(user_id, context):
@@ -76,9 +77,10 @@ async def send_join_message(update: Update, context=None):
 
 # ==================== متن خوش‌آمدگویی منوی اصلی ====================
 def get_welcome_text(user_id, returning):
-    """ساخت متن خوش‌آمدگویی - یک متن ثابت برای همه کاربران"""
+    """ساخت متن خوش‌آمدگویی - یک متن ثابت و یکسان برای همه (طبق درخواست، بدون نسخه‌ی جدا برای کاربر برگشتی)"""
     return (
-        "سلام سلام شهبازی هستم، مریم 😍🌱\n\n"
+        "سلام سلام\n"
+        "شهبازی هستم، مریم 😍🌱\n\n"
         "به سیناپس خوش اومدی. 🌱😍\n"
         "هر آدمی در یکی از این مسیرها به دنبال رشد و توسعه برای ساختن یک ورژن بهتر از خودشه. "
         "تو از کجا میخوای شروع کنی؟\n\n"
@@ -86,6 +88,7 @@ def get_welcome_text(user_id, returning):
         "🔴 لیدی لجستیک\n🌱 محصولات و خدمات سیناپس\n\n"
         "لطفاً مسیر موردنظرت را انتخاب کن. 👇"
     )
+
 
 # ==================== نوتیفیکیشن به ادمین ====================
 async def notify_admin(context, user_id, info, section_type="personal"):
@@ -147,10 +150,17 @@ def get_info_summary(info, section_type):
     return ""
 
 # ==================== هندلر دستور /start ====================
+BANNED_MSG = "🚫 شما توسط مدیریت مسدود شده‌اید و امکان استفاده از این بات را ندارید."
+
 async def start(update: Update, context):
-    """هندلر اصلی شروع بات - بررسی عضویت و نمایش خوش‌آمدگویی"""
+    """هندلر اصلی شروع بات - بررسی مسدودیت/عضویت و نمایش خوش‌آمدگویی (و پنل ادمین برای ادمین)"""
     user_id = update.effective_user.id
     logger.info(f"📩 دستور /start از کاربر {user_id}")
+
+    # 🚫 اگر کاربر مسدود شده، حتی یک پیام هم به او نشان نمی‌دهیم
+    if is_user_banned(user_id):
+        await update.message.reply_text(BANNED_MSG)
+        return
 
     # 💾 ذخیره‌ی فوری آیدی/یوزرنیم تلگرام کاربر، حتی اگر هنوز ثبت‌نام نکرده باشد
     save_telegram_identity(
@@ -168,11 +178,25 @@ async def start(update: Update, context):
         logger.info(f"✅ کاربر {user_id} وارد شد - عضو کانال")
         welcome_msg = get_welcome_text(user_id, returning=is_user_registered(user_id))
 
-        try:
-            with open('images/welcome.jpg', 'rb') as photo:
-                await update.message.reply_photo(photo=photo, caption=welcome_msg, reply_markup=main_menu)
-        except Exception:
+        # توجه: قبل از تلاش برای ارسال عکس، وجود فایل چک می‌شود تا تحت
+        # هیچ شرایطی هر دو پیام (عکس و متن جایگزین) با هم ارسال نشوند -
+        # دقیقاً همان «دو پیام خوش‌آمدگویی» که قبلاً مشاهده می‌شد.
+        import os as _os
+        welcome_photo_path = 'images/welcome.jpg'
+        if _os.path.exists(welcome_photo_path):
+            try:
+                with open(welcome_photo_path, 'rb') as photo:
+                    await update.message.reply_photo(photo=photo, caption=welcome_msg, reply_markup=main_menu)
+            except Exception as e:
+                logger.error(f"⚠️ خطا در ارسال عکس خوش‌آمدگویی، فقط متن ارسال می‌شود: {e}")
+                await update.message.reply_text(welcome_msg, reply_markup=main_menu)
+        else:
             await update.message.reply_text(welcome_msg, reply_markup=main_menu)
+
+        # 🛠 اگر کاربر همان ادمین است، پنل دکمه‌ای مدیریت را هم زیرش نشان بده
+        if user_id == ADMIN_ID:
+            from handlers_admin_panel import show_admin_panel
+            await show_admin_panel(update, context)
 
     except Exception as e:
         logger.error(f"❌ خطا در هندلر start برای کاربر {user_id}: {e}", exc_info=True)
@@ -183,12 +207,23 @@ async def start(update: Update, context):
 
 # ==================== هندلر دکمه‌های اینلاین (callback) ====================
 async def handle_callback(update, context):
-    """پردازش دکمه‌های اینلاین: بررسی عضویت، ویرایش، تایید، انصراف، اشتراک"""
+    """پردازش دکمه‌های اینلاین: بررسی عضویت، ویرایش، تایید، انصراف، اشتراک، پنل ادمین"""
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
     data = query.data
+
+    # 🚫 کاربر مسدود، اجازه‌ی هیچ تعاملی ندارد
+    if is_user_banned(user_id):
+        await query.message.reply_text(BANNED_MSG)
+        return
+
+    # ===== دکمه‌های پنل پیشرفته‌ی ادمین (admin_panel_excel / admin_panel_stats / ...) =====
+    if data.startswith("admin_panel_"):
+        from handlers_admin_panel import handle_admin_panel_callback
+        await handle_admin_panel_callback(update, context, data)
+        return
 
     # ===== انتخاب سطح اشتراک (sub_select_bronze / sub_select_silver / ...) =====
     if data.startswith("sub_select_"):
@@ -229,10 +264,16 @@ async def handle_callback(update, context):
 
             welcome_msg = get_welcome_text(user_id, returning=is_user_registered(user_id))
 
-            try:
-                with open('images/welcome.jpg', 'rb') as photo:
-                    await query.message.reply_photo(photo=photo, caption=welcome_msg, reply_markup=main_menu)
-            except Exception:
+            import os as _os
+            welcome_photo_path = 'images/welcome.jpg'
+            if _os.path.exists(welcome_photo_path):
+                try:
+                    with open(welcome_photo_path, 'rb') as photo:
+                        await query.message.reply_photo(photo=photo, caption=welcome_msg, reply_markup=main_menu)
+                except Exception as e:
+                    logger.error(f"⚠️ خطا در ارسال عکس خوش‌آمدگویی، فقط متن ارسال می‌شود: {e}")
+                    await query.message.reply_text(welcome_msg, reply_markup=main_menu)
+            else:
                 await query.message.reply_text(welcome_msg, reply_markup=main_menu)
 
         else:
@@ -377,6 +418,11 @@ async def handle_photo(update: Update, context):
       2) waiting_subscription_receipt → فیش خرید/تمدید اشتراک - به ادمین با دکمه‌ی تایید/رد می‌رود
     """
     user_id = update.effective_user.id
+
+    if is_user_banned(user_id):
+        await update.message.reply_text(BANNED_MSG)
+        return
+
     state = get_user_state(user_id)
     section = state.get("section")
 

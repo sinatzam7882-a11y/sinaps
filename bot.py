@@ -13,6 +13,7 @@
 # ├── handlers_core.py             ← عضویت کانال، start، callback، فیش، تماس
 # ├── handlers_menu.py             ← پردازش پیام‌های متنی (منو و همه فرم‌ها)
 # ├── handlers_subscription.py     ← خرید/تایید/رد اشتراک
+# ├── handlers_admin_panel.py      ← پنل دکمه‌ای پیشرفته‌ی ادمین
 # └── excel_and_admin.py           ← گزارش اکسل و دستورات ادمین
 
 import traceback
@@ -31,7 +32,8 @@ from handlers_menu import handle_menu
 
 # ایمپورت دستورات ادمین
 from excel_and_admin import (
-    get_excel, get_data, show_summary, broadcast
+    get_excel, get_data, show_summary, broadcast, reply_to_user,
+    find_user, ban_user_cmd, unban_user_cmd, show_pending,
 )
 
 # ==================== هندلر سراسری خطا ====================
@@ -58,6 +60,11 @@ app.add_handler(CommandHandler("getexcel", get_excel))
 app.add_handler(CommandHandler("getdata", get_data))
 app.add_handler(CommandHandler("summary", show_summary))
 app.add_handler(CommandHandler("broadcast", broadcast))
+app.add_handler(CommandHandler("reply", reply_to_user))
+app.add_handler(CommandHandler("find", find_user))
+app.add_handler(CommandHandler("ban", ban_user_cmd))
+app.add_handler(CommandHandler("unban", unban_user_cmd))
+app.add_handler(CommandHandler("pending", show_pending))
 
 # ثبت هندلر callback (دکمه‌های اینلاین)
 app.add_handler(CallbackQueryHandler(handle_callback))
@@ -78,4 +85,9 @@ print(f"👑 ادمین: {ADMIN_ID}")
 print("📁 اطلاعات در فایل‌های JSON ذخیره می‌شوند")
 print("📊 دستور /getexcel برای دریافت فایل اکسل")
 print("📤 دستور /broadcast [پیام] برای ارسال همگانی")
+print("💬 دستور /reply [آیدی کاربر] [پیام] برای پاسخ مستقیم به یک کاربر")
+print("🔍 دستور /find [نام یا شماره] برای جستجوی کاربر")
+print("🚫 دستور /ban [آیدی کاربر] و /unban [آیدی کاربر]")
+print("⏳ دستور /pending برای دیدن موارد در انتظار بررسی")
+print("🛠 پنل دکمه‌ای ادمین بعد از /start خودکار نشان داده می‌شود")
 app.run_polling()
