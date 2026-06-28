@@ -6,7 +6,9 @@
     "phone": "ب",
     "city": "ب",
     "telegram_id": "7578550855",
-    "last_update": "2026-06-27 16:53:13"
+    "last_update": "2026-06-27 16:53:13",
+    "telegram_username": "@malam_shbzy",
+    "first_seen": "2026-06-28 22:41:07"
   },
   "8065571732": {
     "telegram_id": "8065571732",
@@ -30,5 +32,11 @@
     "telegram_username": "@Drhzdh",
     "telegram_display_name": "𝑺𝑨𝒍𝑬𝑯",
     "first_seen": "2026-06-28 11:08:54"
+  },
+  "7204290886": {
+    "telegram_id": "7204290886",
+    "telegram_username": "@malam_shahbazi",
+    "telegram_display_name": "Malam",
+    "first_seen": "2026-06-29 00:21:40"
   }
 }
