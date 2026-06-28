@@ -10,16 +10,13 @@ from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, 
 # دکمه «💎 خرید اشتراک» هم زیر آن قرار گرفت چون کلید ورود به امکانات هوشمند است.
 main_menu = ReplyKeyboardMarkup([
     [KeyboardButton("🌱 محصولات و خدمات سیناپس 🌱")],
-    [KeyboardButton("💎 خرید اشتراک")],
-    [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار")],
-    [KeyboardButton("🟣 مسئولیت اجتماعی"), KeyboardButton("🟠 مسیر رشد")],
-    [KeyboardButton("🔴 لیدی لجستیک")],
-    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📁 درخواست پروژه")],
-    [KeyboardButton("🎨 طراحی بنر")],
+    [KeyboardButton("💎 خرید اشتراک"), KeyboardButton("📞 ارتباط با پشتیبانی")],
+    [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار"), KeyboardButton("🟣 مسئولیت اجتماعی")],
+    [KeyboardButton("🟠 مسیر رشد"), KeyboardButton("🔴 لیدی لجستیک")],
+    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📁 درخواست پروژه"), KeyboardButton("🎨 طراحی بنر")],
     [KeyboardButton("📖 راهنمای انتخاب مسیر"), KeyboardButton("🆔 اطلاعات شخصی")],
     [KeyboardButton("🏢 اطلاعات کسب و کار"), KeyboardButton("📊 پرسشنامه تخصصی")],
-    [KeyboardButton("📞 ارتباط با پشتیبانی")],
-    [KeyboardButton("💳 ارسال فیش پرداخت")]
+    [KeyboardButton("💳 ارسال فیش پرداخت")],
 ], resize_keyboard=True)
 
 # ==================== منوی بازار کار ====================

@@ -11,11 +11,10 @@ from config import (
     CHANNEL_ID, ADMIN_ID, logger,
     get_user_state, set_user_state, clear_user_state,
     get_user_info, is_user_registered, save_user_info,
-    save_telegram_identity, get_subscription,
+    save_telegram_identity,
 )
 from menus import main_menu, back_menu, get_confirm_keyboard
 from texts_profile import personal_info_questions, business_info_questions
-from texts_subscription import build_subscription_status_line
 
 # ==================== بررسی عضویت کاربر در کانال ====================
 async def is_member_of_channel(user_id, context):
@@ -77,26 +76,9 @@ async def send_join_message(update: Update, context=None):
 
 # ==================== متن خوش‌آمدگویی منوی اصلی ====================
 def get_welcome_text(user_id, returning):
-    """ساخت متن خوش‌آمدگویی - برای کاربر جدید یا کاربری که قبلاً ثبت‌نام کرده"""
-    if returning:
-        user_info = get_user_info(user_id)
-        subscription = get_subscription(user_id)
-        status_line = build_subscription_status_line(subscription)
-        return (
-            f"✨ خوش برگشتی {user_info.get('first_name', '')} عزیز!\n\n"
-            f"{status_line}\n\n"
-            "به سیناپس خوش اومدی. 🌱😍\n"
-            "هر آدمی در یکی از این مسیرها به دنبال رشد و توسعه برای ساختن یک ورژن بهتر از خودشه. "
-            "تو از کجا میخوای شروع کنی؟\n\n"
-            "🟢 بازار کار\n🔵 کسب‌وکار\n🟣 مسئولیت اجتماعی\n🟠 مسیر رشد\n"
-            "🔴 لیدی لجستیک\n🌱 محصولات و خدمات سیناپس\n\n"
-            "لطفاً مسیر موردنظرت را انتخاب کن. 👇"
-        )
+    """ساخت متن خوش‌آمدگویی - یک متن ثابت برای همه کاربران"""
     return (
-        "سلام سلام\n"
-        "شهبازی هستم، مریم 😍🌱\n"
-        "اینجا قراره هویت کسب و کار و برند خودتون رو بسازید و روز به روز فروش بیشتری رو تجربه کنین.\n"
-        "با من همراه باش\n\n"
+        "سلام سلام شهبازی هستم، مریم 😍🌱\n\n"
         "به سیناپس خوش اومدی. 🌱😍\n"
         "هر آدمی در یکی از این مسیرها به دنبال رشد و توسعه برای ساختن یک ورژن بهتر از خودشه. "
         "تو از کجا میخوای شروع کنی؟\n\n"

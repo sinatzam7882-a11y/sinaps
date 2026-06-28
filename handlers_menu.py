@@ -137,7 +137,30 @@ async def handle_menu_text_value(update: Update, context, text: str):
 
     # ===== محصولات و خدمات سیناپس =====
     if text == "🌱 محصولات و خدمات سیناپس 🌱":
-        await update.message.reply_text(SYNAPSE_PRODUCTS_MSG, reply_markup=main_menu)
+        user_info = get_user_info(user_id)
+        first_name = user_info.get("first_name", "کاربر")
+        last_name = user_info.get("last_name", "")
+        username = update.effective_user.username or "ندارد"
+        # اطلاع‌رسانی به ادمین
+        admin_notice = (
+            f"🌱 درخواست محصولات و خدمات سیناپس\n\n"
+            f"👤 {first_name} {last_name}\n"
+            f"🆔 آیدی عددی: {user_id}\n"
+            f"📱 یوزرنیم: @{username}\n\n"
+            f"کاربر روی «محصولات و خدمات سیناپس» کلیک کرد و منتظر پاسخ است."
+        )
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_notice)
+        except Exception as e:
+            logger.error(f"خطا در ارسال نوتیفیکیشن محصولات به ادمین: {e}")
+        # پیام انتظار به کاربر
+        await update.message.reply_text(
+            "🌱 محصولات و خدمات سیناپس\n\n"
+            "درخواست شما ثبت شد. 🌟\n"
+            "کارشناسان سیناپس به زودی با اطلاعات کامل محصولات و خدمات با شما در ارتباط خواهند بود.\n\n"
+            "⏰ زمان پاسخگویی: حداکثر چند دقیقه",
+            reply_markup=main_menu
+        )
         return
 
     # ===== 💎 خرید اشتراک =====
@@ -305,9 +328,6 @@ async def handle_menu_text_value(update: Update, context, text: str):
     if text == "📁 درخواست پروژه":
         if not is_user_registered(user_id):
             await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
-            return
-        if not has_active_subscription(user_id):
-            await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
             return
         clear_user_state(user_id)
         set_user_state(user_id, "project_request", 0, {})
