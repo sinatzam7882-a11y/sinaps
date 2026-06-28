@@ -48,6 +48,18 @@ from texts_features import (
 from handlers_core import is_member_of_channel, send_join_message, notify_admin, get_info_summary
 from config import SUPPORT_INFO  # اطلاعات تماس پشتیبانی (شماره، آیدی تلگرام، ساعات کاری)
 
+# ==================== پیام خطای ثبت‌نام (با دکمه‌ی شروع مستقیم) ====================
+def _not_registered_keyboard():
+    """دکمه‌ای که مستقیماً ثبت‌نام را شروع می‌کند"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🆔 ثبت اطلاعات شخصی", callback_data="start_personal_registration")]
+    ])
+
+NOT_REGISTERED_MSG = (
+    "⚠️ برای استفاده از این بخش ابتدا باید اطلاعات شخصی خود را ثبت کنید.\n\n"
+    "👇 روی دکمه کلیک کنید تا ثبت‌نام شروع شود:"
+)
+
 # ==================== کیبورد مناسب برای هر مرحله از یک فرم گام‌به‌گام ====================
 def _keyboard_for_step(questions, step, phone_fields):
     """
@@ -138,6 +150,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
         "🔴 لیدی لجستیک": logistics_menu,
     }
     if text in menus:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         await update.message.reply_text(f"{text}\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:", reply_markup=menus[text])
         return
 
@@ -150,6 +165,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
         "🏢 کارفرما": "کارفرما",
     }
     if text in MARKET_ROLE_MAP:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         clear_user_state(user_id)
         prefilled = {"role": MARKET_ROLE_MAP[text]}
         # ایندکس سوال role را پیدا می‌کنیم تا از سوال بعد از آن شروع کنیم
@@ -172,6 +190,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
 
     # ===== فرم‌های لیدی لجستیک =====
     if text in LOGISTICS_FORMS:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         set_user_state(user_id, "logistics_waiting", 0, {"service": text})
         await update.message.reply_text(LOGISTICS_FORMS[text], reply_markup=back_menu)
         await update.message.reply_text("📝 لطفاً اطلاعات خواسته شده را در یک پیام ارسال کنید:", reply_markup=back_menu)
@@ -206,6 +227,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== محصولات و خدمات سیناپس - نمایش لیست + شروع دریافت سفارش آزاد =====
     # نکته: بدون نیاز به اشتراک یا حتی ثبت‌نام؛ هر کاربری می‌تواند سفارش بدهد.
     if text == "🌱 محصولات و خدمات سیناپس 🌱":
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         clear_user_state(user_id)
         set_user_state(user_id, "product_order_waiting", 0, {})
         await update.message.reply_text(SYNAPSE_PRODUCTS_MSG, reply_markup=back_menu)
@@ -235,6 +259,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
 
     # ===== شروع فرم کسب‌وکار (برند شخصی/محصولی/سازمانی) =====
     if text in BUSINESS_QUESTIONS:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         data = BUSINESS_QUESTIONS[text]
         set_user_state(user_id, "section_form", 0, {
             "form_type": "business",
@@ -248,6 +275,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
 
     # ===== شروع فرم مسئولیت اجتماعی =====
     if text in SOCIAL_QUESTIONS:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         data = SOCIAL_QUESTIONS[text]
         set_user_state(user_id, "section_form", 0, {
             "form_type": "social",
@@ -261,6 +291,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
 
     # ===== شروع فرم مسیر رشد =====
     if text in GROWTH_QUESTIONS:
+        if not is_user_registered(user_id):
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
+            return
         data = GROWTH_QUESTIONS[text]
         set_user_state(user_id, "section_form", 0, {
             "form_type": "growth",
@@ -352,7 +385,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== اطلاعات کسب و کار =====
     if text == "🏢 اطلاعات کسب و کار":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
         clear_user_state(user_id)
         set_user_state(user_id, "business", 0, {})
@@ -362,7 +395,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== پرسشنامه تخصصی =====
     if text == "📊 پرسشنامه تخصصی":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
         clear_user_state(user_id)
         set_user_state(user_id, "survey", 0, {})
@@ -378,7 +411,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== 💬 مشاوره هوشمند (نیاز به اشتراک) =====
     if text == "💬 مشاوره هوشمند":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
         if not has_active_subscription(user_id):
             await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
@@ -396,7 +429,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== 📁 شروع فرم درخواست پروژه (آزاد - بدون نیاز به اشتراک) =====
     if text == "📁 درخواست پروژه":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
         clear_user_state(user_id)
         set_user_state(user_id, "project_request", 0, {})
@@ -429,7 +462,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # ===== 🎨 طراحی بنر =====
     if text == "🎨 طراحی بنر":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
         if not has_active_subscription(user_id):
             await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
@@ -543,7 +576,7 @@ async def handle_menu_text_value(update: Update, context, text: str):
     # اصلی) به‌غلط با پیام «نیاز به اشتراک دارید» مسدود نشود.
     if section == "ai_chat":
         if not is_user_registered(user_id):
-            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            await update.message.reply_text(NOT_REGISTERED_MSG, reply_markup=_not_registered_keyboard())
             return
 
         if not has_active_subscription(user_id):

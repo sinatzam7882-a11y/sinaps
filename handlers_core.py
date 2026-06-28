@@ -238,6 +238,23 @@ async def handle_callback(update, context):
         await show_subscription_plans_from_callback(update, context)
         return
 
+    # ===== شروع ثبت‌نام از طریق دکمه‌ی ارور (وقتی کاربر ثبت‌نام نکرده) =====
+    if data == "start_personal_registration":
+        from config import set_user_state, clear_user_state
+        from menus import back_menu
+        from texts_profile import personal_info_questions
+        clear_user_state(user_id)
+        set_user_state(user_id, "personal", 0, {})
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await query.message.reply_text(
+            f"📝 ثبت اطلاعات شخصی\n\n{personal_info_questions[0][1]}",
+            reply_markup=back_menu
+        )
+        return
+
     # ===== تایید اشتراک توسط ادمین (sub_approve_<user_id>) =====
     if data.startswith("sub_approve_"):
         from handlers_subscription import handle_admin_approve_subscription
