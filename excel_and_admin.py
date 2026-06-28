@@ -15,10 +15,44 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from datetime import datetime
 from telegram import Update
 from config import (
-    read_json, USERS_FILE, SURVEY_FILE, ASSESSMENT_FILE, SECTION_FORMS_FILE,
+    read_json,
+    USERS_FILE, SURVEY_FILE, ASSESSMENT_FILE, SECTION_FORMS_FILE,
     SUBSCRIPTIONS_FILE, PRODUCT_ORDERS_FILE, SUBSCRIPTION_TIERS, BANNED_USERS_FILE,
     EXCEL_FILE, ADMIN_ID, logger
 )
+
+# ==================== فایل‌های JSON که در این نسخه اضافه شدند ====================
+PROJECT_REQUESTS_FILE = os.path.join(os.path.dirname(USERS_FILE), "project_requests.json")
+LOGISTICS_FILE        = os.path.join(os.path.dirname(USERS_FILE), "logistics_requests.json")
+
+# ==================== توابع ذخیره‌سازی درخواست پروژه و لجستیک ====================
+def save_project_request(user_id, answers: dict):
+    """ذخیره پاسخ‌های فرم درخواست پروژه در JSON"""
+    import json
+    uid = str(user_id)
+    data = read_json(PROJECT_REQUESTS_FILE, {})
+    if uid not in data:
+        data[uid] = []
+    record = dict(answers)
+    record["submitted_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data[uid].append(record)
+    with open(PROJECT_REQUESTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def save_logistics_request(user_id, service: str, message_text: str):
+    """ذخیره پاسخ فرم لیدی لجستیک در JSON"""
+    import json
+    uid = str(user_id)
+    data = read_json(LOGISTICS_FILE, {})
+    if uid not in data:
+        data[uid] = []
+    data[uid].append({
+        "service": service,
+        "message": message_text,
+        "submitted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+    with open(LOGISTICS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ==================== استایل مشترک هدر شیت‌ها ====================
 def _style_header(ws, headers):
@@ -49,6 +83,9 @@ def generate_excel_report():
     subscriptions = read_json(SUBSCRIPTIONS_FILE, {})
     product_orders = read_json(PRODUCT_ORDERS_FILE, {})
     banned_users = read_json(BANNED_USERS_FILE, [])
+
+    project_requests = read_json(PROJECT_REQUESTS_FILE, {})
+    logistics_requests = read_json(LOGISTICS_FILE, {})
 
     wb = openpyxl.Workbook()
 
@@ -222,12 +259,60 @@ def generate_excel_report():
         ws6.cell(row=row, column=8, value=sub.get('approved_at', '-'))
         ws6.cell(row=row, column=9, value=sub.get('expires_at', '-'))
 
-    # ===== شیت ۷: خلاصه آمار =====
-    ws7 = wb.create_sheet("خلاصه آمار")
+    # ===== شیت ۷: درخواست‌های پروژه =====
+    ws7 = wb.create_sheet("درخواست پروژه")
+
+    headers7 = ["ردیف", "آیدی تلگرام", "نام", "نام خانوادگی", "شماره تماس",
+                "عنوان پروژه", "توضیحات", "بودجه", "ددلاین",
+                "شماره پیگیری", "تاریخ ثبت"]
+    _style_header(ws7, headers7)
+
+    row_idx = 2
+    for user_id, requests in project_requests.items():
+        user_info = users.get(user_id, {})
+        for req in requests:
+            ws7.cell(row=row_idx, column=1, value=row_idx - 1)
+            ws7.cell(row=row_idx, column=2, value=user_info.get('telegram_id', user_id))
+            ws7.cell(row=row_idx, column=3, value=user_info.get('first_name', ''))
+            ws7.cell(row=row_idx, column=4, value=user_info.get('last_name', ''))
+            ws7.cell(row=row_idx, column=5, value=user_info.get('phone', ''))
+            ws7.cell(row=row_idx, column=6, value=req.get('project_title', ''))
+            ws7.cell(row=row_idx, column=7, value=req.get('project_desc', ''))
+            ws7.cell(row=row_idx, column=8, value=req.get('project_budget', ''))
+            ws7.cell(row=row_idx, column=9, value=req.get('project_deadline', ''))
+            ws7.cell(row=row_idx, column=10, value=req.get('project_phone', ''))
+            ws7.cell(row=row_idx, column=11, value=req.get('submitted_at', ''))
+            row_idx += 1
+
+    # ===== شیت ۸: درخواست‌های لیدی لجستیک =====
+    ws8 = wb.create_sheet("لیدی لجستیک")
+
+    headers8 = ["ردیف", "آیدی تلگرام", "نام", "نام خانوادگی", "شماره تماس",
+                "نوع خدمت", "اطلاعات ارسالی", "تاریخ ثبت"]
+    _style_header(ws8, headers8)
+
+    row_idx = 2
+    for user_id, requests in logistics_requests.items():
+        user_info = users.get(user_id, {})
+        for req in requests:
+            ws8.cell(row=row_idx, column=1, value=row_idx - 1)
+            ws8.cell(row=row_idx, column=2, value=user_info.get('telegram_id', user_id))
+            ws8.cell(row=row_idx, column=3, value=user_info.get('first_name', ''))
+            ws8.cell(row=row_idx, column=4, value=user_info.get('last_name', ''))
+            ws8.cell(row=row_idx, column=5, value=user_info.get('phone', ''))
+            ws8.cell(row=row_idx, column=6, value=req.get('service', ''))
+            ws8.cell(row=row_idx, column=7, value=req.get('message', ''))
+            ws8.cell(row=row_idx, column=8, value=req.get('submitted_at', ''))
+            row_idx += 1
+
+    # ===== شیت ۹: خلاصه آمار =====
+    ws9 = wb.create_sheet("خلاصه آمار")
 
     total_section_forms = sum(len(records) for records in section_forms.values())
     total_product_orders = sum(len(orders) for orders in product_orders.values())
     total_active_subs = sum(1 for s in subscriptions.values() if s.get("status") == "active")
+    total_project_requests = sum(len(v) for v in project_requests.values())
+    total_logistics = sum(len(v) for v in logistics_requests.values())
 
     stats_data = [
         ["آمار کلی", ""],
@@ -236,6 +321,8 @@ def generate_excel_report():
         ["تعداد پرسشنامه‌های تکمیل شده", sum(1 for u in surveys if len(surveys[u]) > 2)],
         ["تعداد فرم‌های بخش‌ها (کسب‌وکار/مسئولیت/رشد) تکمیل‌شده", total_section_forms],
         ["تعداد سفارش‌های ثبت‌شده از محصولات/خدمات", total_product_orders],
+        ["تعداد درخواست‌های پروژه", total_project_requests],
+        ["تعداد درخواست‌های لیدی لجستیک", total_logistics],
         ["تعداد اشتراک‌های فعال فعلی", total_active_subs],
         ["تاریخ تولید گزارش", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         ["", ""],
@@ -247,11 +334,11 @@ def generate_excel_report():
         stats_data.append([f"{i}. {name}", info.get('business_name', '')])
 
     for row, (key, value) in enumerate(stats_data, 1):
-        ws7.cell(row=row, column=1, value=key)
-        ws7.cell(row=row, column=2, value=value)
+        ws9.cell(row=row, column=1, value=key)
+        ws9.cell(row=row, column=2, value=value)
 
-    ws7.column_dimensions['A'].width = 35
-    ws7.column_dimensions['B'].width = 30
+    ws9.column_dimensions['A'].width = 35
+    ws9.column_dimensions['B'].width = 30
 
     wb.save(EXCEL_FILE)
     return EXCEL_FILE
@@ -291,6 +378,8 @@ async def get_data(update: Update, context):
         (SURVEY_FILE, f'survey_{datetime.now().strftime("%Y%m%d")}.json'),
         (ASSESSMENT_FILE, f'assessment_{datetime.now().strftime("%Y%m%d")}.json'),
         (SECTION_FORMS_FILE, f'section_forms_{datetime.now().strftime("%Y%m%d")}.json'),
+        (PROJECT_REQUESTS_FILE, f'project_requests_{datetime.now().strftime("%Y%m%d")}.json'),
+        (LOGISTICS_FILE, f'logistics_requests_{datetime.now().strftime("%Y%m%d")}.json'),
         (SUBSCRIPTIONS_FILE, f'subscriptions_{datetime.now().strftime("%Y%m%d")}.json'),
         (PRODUCT_ORDERS_FILE, f'product_orders_{datetime.now().strftime("%Y%m%d")}.json'),
         (BANNED_USERS_FILE, f'banned_users_{datetime.now().strftime("%Y%m%d")}.json'),
@@ -310,10 +399,14 @@ def build_summary_text():
     section_forms = read_json(SECTION_FORMS_FILE, {})
     subscriptions = read_json(SUBSCRIPTIONS_FILE, {})
     product_orders = read_json(PRODUCT_ORDERS_FILE, {})
+    project_requests = read_json(PROJECT_REQUESTS_FILE, {})
+    logistics_requests = read_json(LOGISTICS_FILE, {})
 
     completed_surveys = sum(1 for u in surveys if len(surveys[u]) > 2)
     total_section_forms = sum(len(records) for records in section_forms.values())
     total_orders = sum(len(orders) for orders in product_orders.values())
+    total_projects = sum(len(v) for v in project_requests.values())
+    total_logistics = sum(len(v) for v in logistics_requests.values())
     active_subs = sum(1 for s in subscriptions.values() if s.get("status") == "active")
     today = datetime.now().strftime("%Y-%m-%d")
     today_users = sum(1 for u in users.values() if u.get("last_update", "").startswith(today))
@@ -324,6 +417,8 @@ def build_summary_text():
     summary += f"📊 پرسشنامه‌های تکمیل شده: {completed_surveys}\n"
     summary += f"🧩 فرم‌های بخش‌ها (کسب‌وکار/مسئولیت/رشد): {total_section_forms}\n"
     summary += f"🌱 سفارش‌های محصولات/خدمات: {total_orders}\n"
+    summary += f"📁 درخواست‌های پروژه: {total_projects}\n"
+    summary += f"🔴 درخواست‌های لیدی لجستیک: {total_logistics}\n"
     summary += f"💎 اشتراک‌های فعال: {active_subs}\n"
     summary += f"🆕 کاربران امروز: {today_users}\n\n"
     summary += "**آخرین ۵ کاربر:**\n"

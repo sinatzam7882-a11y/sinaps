@@ -203,6 +203,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
         service = temp.get("service", "درخواست")
         user_info = get_user_info(user_id)
         first_name = user_info.get("first_name", "کاربر")
+        # 💾 ذخیره در JSON
+        from excel_and_admin import save_logistics_request
+        save_logistics_request(user_id, service, text)
         admin_msg = (
             f"📋 درخواست جدید - {service}\n"
             f"👤 {first_name} {user_info.get('last_name', '')}\n"
@@ -450,6 +453,9 @@ async def handle_menu_text_value(update: Update, context, text: str):
                 user_info = get_user_info(user_id)
                 first_name = user_info.get("first_name", "کاربر")
                 last_name = user_info.get("last_name", "")
+                # 💾 ذخیره درخواست پروژه در JSON
+                from excel_and_admin import save_project_request
+                save_project_request(user_id, dict(temp))
                 admin_msg = build_admin_project_request_notice(user_id, first_name, last_name, temp)
                 try:
                     await context.bot.send_message(ADMIN_ID, admin_msg)
