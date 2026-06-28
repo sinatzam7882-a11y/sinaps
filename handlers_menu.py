@@ -141,6 +141,35 @@ async def handle_menu_text_value(update: Update, context, text: str):
         await update.message.reply_text(f"{text}\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:", reply_markup=menus[text])
         return
 
+    # ===== زیرمنوی بازار کار: کارجو / فریلنسر / کارفرما =====
+    # هر سه دکمه فرم ارزیابی بازار کار را شروع می‌کنند.
+    # نقش انتخابی کاربر از پیش در temp ذخیره می‌شود تا دوباره نپرسیم.
+    MARKET_ROLE_MAP = {
+        "👤 کارجو": "کارجو",
+        "💼 فریلنسر": "فریلنسر",
+        "🏢 کارفرما": "کارفرما",
+    }
+    if text in MARKET_ROLE_MAP:
+        clear_user_state(user_id)
+        prefilled = {"role": MARKET_ROLE_MAP[text]}
+        # ایندکس سوال role را پیدا می‌کنیم تا از سوال بعد از آن شروع کنیم
+        role_step = next(
+            (i for i, (f, _) in enumerate(assessment_questions) if f == "role"), None
+        )
+        if role_step is not None:
+            start_step = role_step + 1
+        else:
+            start_step = 0
+        set_user_state(user_id, "assessment", start_step, prefilled)
+        intro = (
+            f"🟢 بازار کار — {MARKET_ROLE_MAP[text]}\n\n"
+            "🌱 برای شناخت بهتر، چند سوال کوتاه داریم:"
+        )
+        await update.message.reply_text(intro, reply_markup=back_menu)
+        kb = _keyboard_for_step(assessment_questions, start_step, PHONE_FIELDS)
+        await update.message.reply_text(assessment_questions[start_step][1], reply_markup=kb)
+        return
+
     # ===== فرم‌های لیدی لجستیک =====
     if text in LOGISTICS_FORMS:
         set_user_state(user_id, "logistics_waiting", 0, {"service": text})
