@@ -3,13 +3,16 @@
 #
 # ساختار فایل‌ها:
 # ├── bot.py                       ← این فایل (نقطه اجرا)
-# ├── config.py                    ← تنظیمات، اتصال Gemini، توابع JSON و State
-# ├── menus.py                     ← فقط کیبوردهای منو
+# ├── config.py                    ← تنظیمات، Gemini، JSON، State، سیستم اشتراک
+# ├── menus.py                     ← کیبوردهای منو + کیبورد اشتراک/تماس
 # ├── texts_profile.py             ← سوالات اطلاعات شخصی/کسب‌وکار/پرسشنامه/ارزیابی
 # ├── texts_section_forms.py       ← سوالات تب کسب‌وکار، مسئولیت اجتماعی، مسیر رشد
 # ├── texts_products_logistics.py  ← متن محصولات/خدمات سیناپس + فرم‌های لیدی لجستیک
-# ├── handlers_core.py             ← عضویت کانال، start، callback، دریافت فیش
+# ├── texts_subscription.py        ← متن‌های خرید/تایید/رد/انقضای اشتراک
+# ├── texts_features.py            ← سوالات درخواست پروژه + استراکچر طراحی بنر
+# ├── handlers_core.py             ← عضویت کانال، start، callback، فیش، تماس
 # ├── handlers_menu.py             ← پردازش پیام‌های متنی (منو و همه فرم‌ها)
+# ├── handlers_subscription.py     ← خرید/تایید/رد اشتراک
 # └── excel_and_admin.py           ← گزارش اکسل و دستورات ادمین
 
 import traceback
@@ -23,7 +26,7 @@ from telegram.ext import (
 from config import BOT_TOKEN, logger, CHANNEL_ID, ADMIN_ID
 
 # ایمپورت هندلرها
-from handlers_core import start, handle_callback, handle_photo
+from handlers_core import start, handle_callback, handle_photo, handle_contact
 from handlers_menu import handle_menu
 
 # ایمپورت دستورات ادمین
@@ -59,8 +62,11 @@ app.add_handler(CommandHandler("broadcast", broadcast))
 # ثبت هندلر callback (دکمه‌های اینلاین)
 app.add_handler(CallbackQueryHandler(handle_callback))
 
-# ثبت هندلر تصویر (فیش پرداخت)
+# ثبت هندلر تصویر (فیش پرداخت / فیش اشتراک)
 app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+# ثبت هندلر شماره تماس خودکار (دکمه‌ی Request Contact تلگرام)
+app.add_handler(MessageHandler(filters.CONTACT, handle_contact))
 
 # ثبت هندلر پیام متنی (منو و فرم‌ها)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_menu))

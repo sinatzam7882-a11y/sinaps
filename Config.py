@@ -30,6 +30,64 @@ logger.info(f"✅ ربات با موفقیت راه‌اندازی شد!")
 logger.info(f"📢 کانال: {CHANNEL_ID}")
 logger.info(f"👑 ادمین: {ADMIN_ID}")
 
+# ════════════════════════════════════════════════════════════════
+# 💳 تنظیمات قیمت اشتراک — فقط همین خط‌ها را برای تغییر قیمت ویرایش کنید
+# ════════════════════════════════════════════════════════════════
+# نکته: عمداً عدد دقیق تومان اینجا گذاشته نشده. هر وقت قیمت نهایی را
+# مشخص کردید، فقط مقدار رشته‌ی زیر را عوض کنید (مثلاً "350,000 تومان")
+# و بات بدون هیچ تغییر دیگری از مقدار جدید استفاده می‌کند.
+BRONZE_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"   # 👈 اینجا قیمت برنزی را بنویسید
+SILVER_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"   # (سطح نقره‌ای - فعلاً غیرفعال)
+GOLD_SUBSCRIPTION_PRICE = "قیمت متعاقباً اعلام می‌شود"     # (سطح طلایی - فعلاً غیرفعال)
+
+# ==================== سطوح اشتراک ====================
+# فقط سطح «برنزی» در حال حاضر فعال است (active=True). دو سطح دیگر
+# به‌صورت کامل نوشته شده‌اند اما غیرفعال‌اند (active=False) تا هر وقت
+# خواستید، فقط همین مقدار را True کنید و در منوها هم نمایش داده شوند.
+# (در فایل menus_subscription.py به‌صورت خودکار فقط سطح‌های active نشان داده می‌شوند)
+SUBSCRIPTION_TIERS = {
+    "bronze": {
+        "key": "bronze",
+        "label": "🥉 اشتراک برنزی",
+        "price": BRONZE_SUBSCRIPTION_PRICE,
+        "duration_days": 30,
+        "active": True,
+        "perks": [
+            "💬 دسترسی کامل به مشاوره هوشمند (هوش مصنوعی)",
+            "📁 امکان ثبت درخواست پروژه",
+            "🎨 دسترسی به طراحی بنر اختصاصی",
+        ],
+    },
+    "silver": {
+        "key": "silver",
+        "label": "🥈 اشتراک نقره‌ای",
+        "price": SILVER_SUBSCRIPTION_PRICE,
+        "duration_days": 30,
+        "active": False,  # 👈 بعداً برای فعال‌سازی این سطح، True کنید
+        "perks": [
+            "✨ همه‌ی امکانات سطح برنزی",
+            "⚡ اولویت پاسخ‌گویی کارشناسان",
+            # TODO: مزایای اختصاصی سطح نقره‌ای را اینجا اضافه کنید
+        ],
+    },
+    "gold": {
+        "key": "gold",
+        "label": "🥇 اشتراک طلایی",
+        "price": GOLD_SUBSCRIPTION_PRICE,
+        "duration_days": 30,
+        "active": False,  # 👈 بعداً برای فعال‌سازی این سطح، True کنید
+        "perks": [
+            "✨ همه‌ی امکانات سطح نقره‌ای",
+            "👑 جلسه مشاوره اختصاصی ماهانه",
+            # TODO: مزایای اختصاصی سطح طلایی را اینجا اضافه کنید
+        ],
+    },
+}
+
+def get_active_subscription_tiers():
+    """فقط سطوح اشتراکی که active=True هستند را برمی‌گرداند (الان فقط برنزی)"""
+    return {k: v for k, v in SUBSCRIPTION_TIERS.items() if v.get("active")}
+
 # ==================== پرامپت سیستم برای هوش مصنوعی ====================
 SYSTEM_PROMPT = (
     "تو یک مشاور کسب و کار حرفه‌ای هستی به نام مریم شهبازی. "
@@ -57,6 +115,8 @@ ASSESSMENT_FILE = "assessment.json"
 # فایل جدید: ذخیره پاسخ‌های فرم‌های برند شخصی/محصولی/سازمانی،
 # مسئولیت اجتماعی و مسیر رشد (همه این فرم‌ها در اینجا ذخیره می‌شوند)
 SECTION_FORMS_FILE = "section_forms.json"
+# فایل جدید: وضعیت اشتراک هر کاربر (فعال/منقضی/در انتظار تایید)
+SUBSCRIPTIONS_FILE = "subscriptions.json"
 EXCEL_FILE = "users_data.xlsx"
 
 # ==================== اطلاعات پشتیبانی ====================
@@ -95,6 +155,27 @@ def save_user_info(user_id, info):
     users[str(user_id)]["last_update"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     write_json(USERS_FILE, users)
     logger.info(f"✅ اطلاعات کاربر {user_id} ذخیره شد")
+    return True
+
+def save_telegram_identity(user_id, username=None, telegram_first_name=None):
+    """
+    ذخیره‌ی فوری آیدی تلگرام کاربر، به محض اولین تماس (مثلاً همان لحظه /start)،
+    حتی اگر هنوز فرم اطلاعات شخصی را پر نکرده باشد. این تابع چیزی را
+    اگر کاربر بعداً پر کند (مثل first_name واقعی) override نمی‌کند؛
+    فقط مطمئن می‌شود رکورد پایه‌ی کاربر از همان ابتدا وجود دارد.
+    """
+    users = read_json(USERS_FILE, {})
+    uid = str(user_id)
+    if uid not in users:
+        users[uid] = {}
+    users[uid]["telegram_id"] = uid
+    if username:
+        users[uid]["telegram_username"] = f"@{username}"
+    if telegram_first_name and not users[uid].get("first_name"):
+        # فقط اگر هنوز نام واقعی ثبت نشده، نام نمایشی تلگرام را به‌عنوان مرجع اولیه نگه می‌داریم
+        users[uid].setdefault("telegram_display_name", telegram_first_name)
+    users[uid].setdefault("first_seen", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    write_json(USERS_FILE, users)
     return True
 
 def save_assessment(user_id, answers):
@@ -165,6 +246,97 @@ def has_completed_assessment(user_id):
     """بررسی اینکه آیا کاربر فرم ارزیابی را کامل پر کرده یا نه"""
     assessments = read_json(ASSESSMENT_FILE, {})
     return str(user_id) in assessments and len(assessments[str(user_id)]) > 5
+
+# ════════════════════════════════════════════════════════════════
+# 💳 توابع مدیریت اشتراک (سیستم قفل امکانات هوش مصنوعی/پروژه/بنر)
+# ════════════════════════════════════════════════════════════════
+# ساختار هر رکورد در subscriptions.json:
+# {
+#   "status": "none" | "pending" | "active" | "expired" | "rejected",
+#   "tier": "bronze" | "silver" | "gold" | None,
+#   "requested_at": "...",      # زمانی که کاربر فیش را فرستاد
+#   "approved_at": "...",       # زمانی که ادمین تایید کرد
+#   "expires_at": "...",        # تاریخ انقضا (approved_at + duration_days)
+#   "history": [ ... ]          # تاریخچه‌ی درخواست‌های قبلی
+# }
+
+def get_subscription(user_id):
+    """دریافت وضعیت اشتراک یک کاربر (در صورت نبود، حالت پیش‌فرض 'none')"""
+    subs = read_json(SUBSCRIPTIONS_FILE, {})
+    return subs.get(str(user_id), {
+        "status": "none", "tier": None,
+        "requested_at": None, "approved_at": None, "expires_at": None,
+        "history": []
+    })
+
+def _save_subscription(user_id, record):
+    subs = read_json(SUBSCRIPTIONS_FILE, {})
+    subs[str(user_id)] = record
+    write_json(SUBSCRIPTIONS_FILE, subs)
+
+def has_active_subscription(user_id):
+    """
+    بررسی می‌کند که آیا اشتراک کاربر فعال و معتبر است یا نه.
+    اگر تاریخ انقضا گذشته باشد، خودکار وضعیت را 'expired' می‌کند.
+    """
+    record = get_subscription(user_id)
+    if record["status"] != "active" or not record.get("expires_at"):
+        return False
+
+    expires_at = datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S")
+    if datetime.now() > expires_at:
+        # اشتراک منقضی شده - وضعیت را آپدیت کن
+        record["status"] = "expired"
+        _save_subscription(user_id, record)
+        return False
+    return True
+
+def create_pending_subscription(user_id, tier_key):
+    """
+    وقتی کاربر فیش پرداخت اشتراک را ارسال می‌کند، این تابع وضعیت او را
+    'pending' (در انتظار تایید ادمین) می‌کند.
+    """
+    record = get_subscription(user_id)
+    record["status"] = "pending"
+    record["tier"] = tier_key
+    record["requested_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    _save_subscription(user_id, record)
+    logger.info(f"💳 درخواست اشتراک {tier_key} کاربر {user_id} در انتظار تایید ثبت شد")
+    return record
+
+def approve_subscription(user_id):
+    """
+    ادمین درخواست اشتراک کاربر را تایید می‌کند:
+    تاریخ شروع = الان، تاریخ انقضا = الان + مدت سطح اشتراک (مثلاً ۳۰ روز).
+    """
+    from datetime import timedelta
+    record = get_subscription(user_id)
+    tier_key = record.get("tier") or "bronze"
+    tier_info = SUBSCRIPTION_TIERS.get(tier_key, SUBSCRIPTION_TIERS["bronze"])
+    duration = tier_info.get("duration_days", 30)
+
+    now = datetime.now()
+    expires = now + timedelta(days=duration)
+
+    record["status"] = "active"
+    record["approved_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+    record["expires_at"] = expires.strftime("%Y-%m-%d %H:%M:%S")
+    record.setdefault("history", []).append({
+        "tier": tier_key,
+        "approved_at": record["approved_at"],
+        "expires_at": record["expires_at"],
+    })
+    _save_subscription(user_id, record)
+    logger.info(f"✅ اشتراک {tier_key} کاربر {user_id} تایید شد - معتبر تا {record['expires_at']}")
+    return record
+
+def reject_subscription(user_id):
+    """ادمین درخواست اشتراک کاربر را رد می‌کند"""
+    record = get_subscription(user_id)
+    record["status"] = "rejected"
+    _save_subscription(user_id, record)
+    logger.info(f"❌ درخواست اشتراک کاربر {user_id} رد شد")
+    return record
 
 # ==================== مدیریت وضعیت (State) کاربران ====================
 user_states = {}

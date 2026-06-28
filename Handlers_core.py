@@ -11,9 +11,11 @@ from config import (
     CHANNEL_ID, ADMIN_ID, logger,
     get_user_state, set_user_state, clear_user_state,
     get_user_info, is_user_registered, save_user_info,
+    save_telegram_identity, get_subscription,
 )
 from menus import main_menu, back_menu, get_confirm_keyboard
 from texts_profile import personal_info_questions, business_info_questions
+from texts_subscription import build_subscription_status_line
 
 # ==================== بررسی عضویت کاربر در کانال ====================
 async def is_member_of_channel(user_id, context):
@@ -78,8 +80,11 @@ def get_welcome_text(user_id, returning):
     """ساخت متن خوش‌آمدگویی - برای کاربر جدید یا کاربری که قبلاً ثبت‌نام کرده"""
     if returning:
         user_info = get_user_info(user_id)
+        subscription = get_subscription(user_id)
+        status_line = build_subscription_status_line(subscription)
         return (
             f"✨ خوش برگشتی {user_info.get('first_name', '')} عزیز!\n\n"
+            f"{status_line}\n\n"
             "به سیناپس خوش اومدی. 🌱😍\n"
             "هر آدمی در یکی از این مسیرها به دنبال رشد و توسعه برای ساختن یک ورژن بهتر از خودشه. "
             "تو از کجا میخوای شروع کنی؟\n\n"
@@ -165,6 +170,13 @@ async def start(update: Update, context):
     user_id = update.effective_user.id
     logger.info(f"📩 دستور /start از کاربر {user_id}")
 
+    # 💾 ذخیره‌ی فوری آیدی/یوزرنیم تلگرام کاربر، حتی اگر هنوز ثبت‌نام نکرده باشد
+    save_telegram_identity(
+        user_id,
+        username=update.effective_user.username,
+        telegram_first_name=update.effective_user.first_name,
+    )
+
     try:
         is_member = await is_member_of_channel(user_id, context)
         if not is_member:
@@ -189,12 +201,39 @@ async def start(update: Update, context):
 
 # ==================== هندلر دکمه‌های اینلاین (callback) ====================
 async def handle_callback(update, context):
-    """پردازش دکمه‌های اینلاین: بررسی عضویت، ویرایش، تایید، انصراف"""
+    """پردازش دکمه‌های اینلاین: بررسی عضویت، ویرایش، تایید، انصراف، اشتراک"""
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
     data = query.data
+
+    # ===== انتخاب سطح اشتراک (sub_select_bronze / sub_select_silver / ...) =====
+    if data.startswith("sub_select_"):
+        from handlers_subscription import handle_subscription_tier_selection
+        tier_key = data.replace("sub_select_", "")
+        await handle_subscription_tier_selection(update, context, tier_key)
+        return
+
+    # ===== دکمه‌ی «خرید/تمدید اشتراک» که زیر پیام انقضا نشان داده می‌شود =====
+    if data == "open_subscription_menu":
+        from handlers_subscription import show_subscription_plans_from_callback
+        await show_subscription_plans_from_callback(update, context)
+        return
+
+    # ===== تایید اشتراک توسط ادمین (sub_approve_<user_id>) =====
+    if data.startswith("sub_approve_"):
+        from handlers_subscription import handle_admin_approve_subscription
+        target_user_id = data.replace("sub_approve_", "")
+        await handle_admin_approve_subscription(update, context, target_user_id)
+        return
+
+    # ===== رد اشتراک توسط ادمین (sub_reject_<user_id>) =====
+    if data.startswith("sub_reject_"):
+        from handlers_subscription import handle_admin_reject_subscription
+        target_user_id = data.replace("sub_reject_", "")
+        await handle_admin_reject_subscription(update, context, target_user_id)
+        return
 
     # ===== بررسی عضویت پس از کلیک روی دکمه =====
     if data == "check_membership":
@@ -349,11 +388,23 @@ async def handle_callback(update, context):
 
 # ==================== هندلر دریافت تصویر فیش پرداخت ====================
 async def handle_photo(update: Update, context):
-    """دریافت تصویر فیش پرداخت از کاربر و فوروارد به ادمین"""
+    """
+    دریافت تصویر فیش پرداخت از کاربر.
+    دو حالت ممکن است:
+      1) waiting_receipt              → فیش هزینه‌ی گزارش (۲۵۰هزارتومانی فرم‌ها) - مثل قبل
+      2) waiting_subscription_receipt → فیش خرید/تمدید اشتراک - به ادمین با دکمه‌ی تایید/رد می‌رود
+    """
     user_id = update.effective_user.id
     state = get_user_state(user_id)
+    section = state.get("section")
 
-    if state["section"] == "waiting_receipt":
+    if section == "waiting_subscription_receipt":
+        from handlers_subscription import process_subscription_receipt
+        tier_key = state.get("temp", {}).get("tier", "bronze")
+        await process_subscription_receipt(update, context, user_id, tier_key)
+        return
+
+    if section == "waiting_receipt":
         user_info = get_user_info(user_id)
         first_name = user_info.get('first_name', 'کاربر')
         caption = (
@@ -380,3 +431,28 @@ async def handle_photo(update: Update, context):
             "📸 برای ارسال فیش پرداخت از دکمه «💳 ارسال فیش پرداخت» در منوی اصلی استفاده کنید.",
             reply_markup=main_menu
         )
+
+# ==================== هندلر دریافت شماره تماس خودکار (دکمه Request Contact) ====================
+async def handle_contact(update: Update, context):
+    """
+    وقتی کاربر با دکمه‌ی «📱 ارسال خودکار شماره تماس» شماره‌اش را می‌فرستد،
+    تلگرام یک پیام از نوع contact ارسال می‌کند (نه متن معمولی).
+    این هندلر شماره را می‌گیرد و دقیقاً مثل اینکه کاربر آن را تایپ کرده باشد
+    وارد همان مرحله‌ی فعلی فرم (هرکدام که باشد: شخصی/کسب‌وکار/ارزیابی/پروژه) می‌کند.
+    """
+    from handlers_menu import handle_menu_text_value
+    user_id = update.effective_user.id
+    contact = update.message.contact
+
+    if not contact:
+        return
+
+    phone_number = contact.phone_number
+    if not phone_number.startswith("+") and not phone_number.startswith("0"):
+        phone_number = f"+{phone_number}"
+
+    # اگر شماره مال خود کاربر بود (نه یک شخص دیگری که فوروارد کرده)، آیدی تلگرامش را هم ثبت کن
+    if contact.user_id and contact.user_id == user_id:
+        save_telegram_identity(user_id)
+
+    await handle_menu_text_value(update, context, phone_number)

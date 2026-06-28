@@ -5,13 +5,20 @@
 from telegram import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 # ==================== منوی اصلی ====================
+# توجه: دکمه «محصولات و خدمات سیناپس» طبق درخواست به ردیف اول و به‌صورت
+# تمام‌عرض (تک‌دکمه در یک ردیف) منتقل شد تا بزرگ‌تر و در اولین نگاه دیده شود.
+# دکمه «💎 خرید اشتراک» هم زیر آن قرار گرفت چون کلید ورود به امکانات هوشمند است.
 main_menu = ReplyKeyboardMarkup([
+    [KeyboardButton("🌱 محصولات و خدمات سیناپس 🌱")],
+    [KeyboardButton("💎 خرید اشتراک")],
     [KeyboardButton("🟢 بازار کار"), KeyboardButton("🔵 کسب‌وکار")],
     [KeyboardButton("🟣 مسئولیت اجتماعی"), KeyboardButton("🟠 مسیر رشد")],
-    [KeyboardButton("🔴 لیدی لجستیک"), KeyboardButton("🌱 محصولات و خدمات سیناپس")],
+    [KeyboardButton("🔴 لیدی لجستیک")],
+    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📁 درخواست پروژه")],
+    [KeyboardButton("🎨 طراحی بنر")],
     [KeyboardButton("📖 راهنمای انتخاب مسیر"), KeyboardButton("🆔 اطلاعات شخصی")],
     [KeyboardButton("🏢 اطلاعات کسب و کار"), KeyboardButton("📊 پرسشنامه تخصصی")],
-    [KeyboardButton("💬 مشاوره هوشمند"), KeyboardButton("📞 ارتباط با پشتیبانی")],
+    [KeyboardButton("📞 ارتباط با پشتیبانی")],
     [KeyboardButton("💳 ارسال فیش پرداخت")]
 ], resize_keyboard=True)
 
@@ -64,3 +71,39 @@ def get_confirm_keyboard():
         [InlineKeyboardButton("✏️ ویرایش اطلاعات", callback_data="edit")],
         [InlineKeyboardButton("❌ انصراف", callback_data="cancel")]
     ])
+
+# ==================== کیبورد انتخاب سطح اشتراک ====================
+def get_subscription_tiers_keyboard(active_tiers):
+    """
+    یک دکمه‌ی اینلاین برای هر سطح اشتراک فعال می‌سازد (الان فقط برنزی).
+    callback_data به شکل 'sub_select_bronze' است.
+    """
+    rows = []
+    for tier in active_tiers.values():
+        rows.append([InlineKeyboardButton(
+            f"{tier['label']} — {tier['price']}",
+            callback_data=f"sub_select_{tier['key']}"
+        )])
+    return InlineKeyboardMarkup(rows)
+
+# ==================== کیبورد تایید/رد اشتراک برای ادمین ====================
+def get_admin_subscription_keyboard(user_id):
+    """دکمه‌های تایید/رد که زیر فیش پرداخت اشتراک برای ادمین ارسال می‌شود"""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ تایید اشتراک", callback_data=f"sub_approve_{user_id}"),
+            InlineKeyboardButton("❌ رد درخواست", callback_data=f"sub_reject_{user_id}"),
+        ]
+    ])
+
+# ==================== کیبورد درخواست خودکار شماره تماس ====================
+def get_phone_request_keyboard():
+    """
+    دکمه‌ی اشتراک‌گذاری خودکار شماره تماس تلگرام (Request Contact).
+    کاربر می‌تواند به‌جای تایپ، با یک لمس شماره‌ی ثبت‌شده در تلگرامش را بفرستد.
+    دکمه‌ی بازگشت هم کنارش هست تا اگر خواست تایپ دستی کند، راه برگشت داشته باشد.
+    """
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("📱 ارسال خودکار شماره تماس", request_contact=True)],
+        [KeyboardButton("🔙 بازگشت به منوی اصلی")]
+    ], resize_keyboard=True)

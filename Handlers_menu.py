@@ -1,8 +1,16 @@
 # ==================== هندلر پردازش پیام‌های متنی (منو و فرم‌ها) ====================
 # این فایل قلب اصلی بات است: تشخیص می‌دهد کاربر کجای منو یا کدام فرم است
 # و پاسخ مناسب را برمی‌گرداند. شامل: نمایش زیرمنوها، فرم‌های لیدی لجستیک،
-# فرم‌های تب کسب‌وکار/مسئولیت اجتماعی/مسیر رشد (با سوالات ثابت)، اطلاعات
-# شخصی/کسب‌وکار، پرسشنامه تخصصی، فرم ارزیابی بازار کار و مشاوره هوشمند Gemini.
+# فرم‌های تب کسب‌وکار/مسئولیت اجتماعی/مسیر رشد، اطلاعات شخصی/کسب‌وکار،
+# پرسشنامه تخصصی، فرم ارزیابی بازار کار، درخواست پروژه، طراحی بنر
+# و مشاوره هوشمند Gemini — همه‌ی این‌ها پشت سیستم اشتراک قفل/باز می‌شوند.
+#
+# نکته مهم درباره‌ی ساختار: منطق اصلی در handle_menu_text_value(update, context, text)
+# قرار دارد و یک رشته‌ی متن می‌گیرد. تابع handle_menu (که از بات صدا زده می‌شود)
+# فقط متن پیام را استخراج کرده و به همان تابع پاس می‌دهد. این جدا‌سازی لازم است
+# چون وقتی کاربر با دکمه‌ی «ارسال خودکار شماره تماس» شماره‌اش را می‌فرستد،
+# آن پیام از نوع contact است نه text، و handlers_core.handle_contact باید
+# بتواند شماره‌ی استخراج‌شده را دقیقاً مثل یک پاسخ متنی معمولی وارد همین تابع کند.
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -10,30 +18,61 @@ from config import (
     client, SYSTEM_PROMPT, logger, ADMIN_ID,
     get_user_state, set_user_state, clear_user_state,
     get_user_info, is_user_registered, save_assessment,
-    save_survey_answer, save_section_form,
+    save_survey_answer, save_section_form, has_active_subscription,
+    get_subscription,
 )
 from menus import (
     main_menu, market_menu, business_menu, social_menu,
     growth_menu, logistics_menu, back_menu, get_confirm_keyboard,
+    get_phone_request_keyboard,
 )
 from texts_profile import (
     personal_info_questions, business_info_questions,
     survey_questions, assessment_questions, ASSESSMENT_END_MSG,
-    SUPPORT_TEXT_TEMPLATE,
+    SUPPORT_TEXT_TEMPLATE, PHONE_FIELDS,
 )
 from texts_section_forms import (
     BUSINESS_QUESTIONS, SOCIAL_QUESTIONS, GROWTH_QUESTIONS,
     BUSINESS_END_MSG, SOCIAL_END_MSG, GROWTH_END_MSG,
 )
 from texts_products_logistics import SYNAPSE_PRODUCTS_MSG, LOGISTICS_FORMS
+from texts_subscription import SUBSCRIPTION_REQUIRED_MSG, build_subscription_status_line
+from texts_features import (
+    project_request_questions, PROJECT_REQUEST_PHONE_FIELDS,
+    PROJECT_REQUEST_INTRO, PROJECT_REQUEST_END_MSG,
+    build_admin_project_request_notice, BANNER_DESIGN_COMING_SOON_MSG,
+)
 from handlers_core import is_member_of_channel, send_join_message, notify_admin, get_info_summary
 from config import SUPPORT_INFO  # اطلاعات تماس پشتیبانی (شماره، آیدی تلگرام، ساعات کاری)
 
+# ==================== کیبورد مناسب برای هر مرحله از یک فرم گام‌به‌گام ====================
+def _keyboard_for_step(questions, step, phone_fields):
+    """
+    اگر فیلد مرحله‌ی فعلی یک فیلد شماره‌تلفن باشد (مثلاً 'phone')،
+    کیبورد «ارسال خودکار شماره تماس» نشان می‌دهد؛ در غیر این صورت back_menu معمولی.
+    """
+    if step < len(questions):
+        field_name = questions[step][0]
+        if field_name in phone_fields:
+            return get_phone_request_keyboard()
+    return back_menu
+
+# ==================== دکمه‌ی شیشه‌ای «خرید/تمدید اشتراک» ====================
+def _subscription_required_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💳 خرید / تمدید اشتراک", callback_data="open_subscription_menu")]
+    ])
+
 # ==================== هندلر اصلی پردازش پیام‌های متنی ====================
 async def handle_menu(update: Update, context):
+    """نقطه‌ی ورود پیام‌های متنی - فقط متن را استخراج و به تابع اصلی پاس می‌دهد"""
+    text = update.message.text.strip()
+    await handle_menu_text_value(update, context, text)
+
+# ==================== تابع اصلی پردازش (متن یا شماره‌ی ارسالی از دکمه‌ی Contact) ====================
+async def handle_menu_text_value(update: Update, context, text: str):
     """پردازش تمام پیام‌های متنی کاربر - منو، فرم‌ها و مشاوره هوشمند"""
     user_id = update.effective_user.id
-    text = update.message.text.strip()
 
     # بررسی عضویت قبل از هر اقدامی
     if not await is_member_of_channel(user_id, context):
@@ -97,8 +136,14 @@ async def handle_menu(update: Update, context):
         return
 
     # ===== محصولات و خدمات سیناپس =====
-    if text == "🌱 محصولات و خدمات سیناپس":
+    if text == "🌱 محصولات و خدمات سیناپس 🌱":
         await update.message.reply_text(SYNAPSE_PRODUCTS_MSG, reply_markup=main_menu)
+        return
+
+    # ===== 💎 خرید اشتراک =====
+    if text == "💎 خرید اشتراک":
+        from handlers_subscription import show_subscription_plans
+        await show_subscription_plans(update, context)
         return
 
     # ===== شروع فرم کسب‌وکار (برند شخصی/محصولی/سازمانی) =====
@@ -186,7 +231,8 @@ async def handle_menu(update: Update, context):
             "🟣 مسئولیت اجتماعی — اثر مثبت اجتماعی می‌خواهی\n"
             "🟠 مسیر رشد — به دنبال خودشناسی و مسیر زندگی هستی\n"
             "🔴 لیدی لجستیک — خدمات واردات و صادرات\n"
-            "🌱 محصولات و خدمات سیناپس — ابزارها و دوره‌های آموزشی\n\n"
+            "🌱 محصولات و خدمات سیناپس — ابزارها و دوره‌های آموزشی\n"
+            "💎 خرید اشتراک — کلید ورود به مشاوره هوشمند، درخواست پروژه و طراحی بنر\n\n"
             "مسیر موردنظرت را انتخاب کن 👇",
             reply_markup=main_menu
         )
@@ -197,6 +243,8 @@ async def handle_menu(update: Update, context):
         if is_user_registered(user_id):
             user_info = get_user_info(user_id)
             first_name = user_info.get("first_name", "")
+            subscription = get_subscription(user_id)
+            status_line = build_subscription_status_line(subscription)
             edit_kb = InlineKeyboardMarkup([[InlineKeyboardButton("✏️ ویرایش اطلاعات", callback_data="edit_personal")]])
             await update.message.reply_text(
                 f"سلام {first_name} عزیز! 👋\n\n"
@@ -204,6 +252,7 @@ async def handle_menu(update: Update, context):
                 f"👤 {first_name} {user_info.get('last_name', '')}\n"
                 f"🏙️ {user_info.get('city', '')}\n"
                 f"📞 {user_info.get('phone', '')}\n\n"
+                f"{status_line}\n\n"
                 f"برای ویرایش روی دکمه کلیک کنید 👇",
                 reply_markup=edit_kb
             )
@@ -233,15 +282,73 @@ async def handle_menu(update: Update, context):
         await update.message.reply_text(f"📋 پرسشنامه تخصصی\n\n{survey_questions[0][1]}", reply_markup=back_menu)
         return
 
-    # ===== مشاوره هوشمند =====
+    # ════════════════════════════════════════════════════════════
+    # 🔒 از اینجا به بعد سه قابلیتی هستند که پشت اشتراک قفل شده‌اند:
+    # 💬 مشاوره هوشمند | 📁 درخواست پروژه | 🎨 طراحی بنر
+    # ════════════════════════════════════════════════════════════
+
+    # ===== 💬 مشاوره هوشمند =====
     if text == "💬 مشاوره هوشمند":
         if not is_user_registered(user_id):
             await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            return
+        if not has_active_subscription(user_id):
+            await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
             return
         await update.message.reply_text(
             "💬 مشاوره هوشمند\n\nهر سوالی درباره برندسازی، بازاریابی، فروش و... داری بپرس 👇",
             reply_markup=back_menu
         )
+        return
+
+    # ===== 📁 شروع فرم درخواست پروژه =====
+    if text == "📁 درخواست پروژه":
+        if not is_user_registered(user_id):
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            return
+        if not has_active_subscription(user_id):
+            await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
+            return
+        clear_user_state(user_id)
+        set_user_state(user_id, "project_request", 0, {})
+        kb = _keyboard_for_step(project_request_questions, 0, PROJECT_REQUEST_PHONE_FIELDS)
+        await update.message.reply_text(f"{PROJECT_REQUEST_INTRO}\n\n{project_request_questions[0][1]}", reply_markup=kb)
+        return
+
+    # ===== پردازش پاسخ‌های فرم درخواست پروژه =====
+    if section == "project_request":
+        if step < len(project_request_questions):
+            field_name, _ = project_request_questions[step]
+            temp[field_name] = text
+            if step + 1 < len(project_request_questions):
+                set_user_state(user_id, "project_request", step + 1, temp)
+                kb = _keyboard_for_step(project_request_questions, step + 1, PROJECT_REQUEST_PHONE_FIELDS)
+                await update.message.reply_text(project_request_questions[step + 1][1], reply_markup=kb)
+            else:
+                user_info = get_user_info(user_id)
+                first_name = user_info.get("first_name", "کاربر")
+                last_name = user_info.get("last_name", "")
+                admin_msg = build_admin_project_request_notice(user_id, first_name, last_name, temp)
+                try:
+                    await context.bot.send_message(ADMIN_ID, admin_msg)
+                except Exception:
+                    pass
+                clear_user_state(user_id)
+                await update.message.reply_text(PROJECT_REQUEST_END_MSG, reply_markup=main_menu)
+        return
+
+    # ===== 🎨 طراحی بنر =====
+    if text == "🎨 طراحی بنر":
+        if not is_user_registered(user_id):
+            await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+            return
+        if not has_active_subscription(user_id):
+            await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
+            return
+        # TODO: وقتی API طراحی بنر متصل شد، اینجا باید کاربر را وارد یک
+        # فرم ساده (متن/رنگ/سایز بنر) کرد و در نهایت call_banner_design_api
+        # را در texts_features.py صدا زد. تا آن زمان فقط پیام coming-soon نشان می‌دهیم.
+        await update.message.reply_text(BANNER_DESIGN_COMING_SOON_MSG, reply_markup=main_menu)
         return
 
     # ===== ارسال فیش پرداخت =====
@@ -277,7 +384,8 @@ async def handle_menu(update: Update, context):
             temp[field_name] = text
             if step + 1 < len(assessment_questions):
                 set_user_state(user_id, "assessment", step + 1, temp)
-                await update.message.reply_text(assessment_questions[step + 1][1], reply_markup=back_menu)
+                kb = _keyboard_for_step(assessment_questions, step + 1, PHONE_FIELDS)
+                await update.message.reply_text(assessment_questions[step + 1][1], reply_markup=kb)
             else:
                 save_assessment(user_id, temp)
                 await notify_admin(context, user_id, temp, "assessment")
@@ -292,7 +400,8 @@ async def handle_menu(update: Update, context):
             temp[field_name] = text
             if step + 1 < len(personal_info_questions):
                 set_user_state(user_id, "personal", step + 1, temp)
-                await update.message.reply_text(personal_info_questions[step + 1][1], reply_markup=back_menu)
+                kb = _keyboard_for_step(personal_info_questions, step + 1, PHONE_FIELDS)
+                await update.message.reply_text(personal_info_questions[step + 1][1], reply_markup=kb)
             else:
                 summary = get_info_summary(temp, "personal")
                 set_user_state(user_id, "personal_confirm", 0, temp)
@@ -306,7 +415,8 @@ async def handle_menu(update: Update, context):
             temp[field_name] = text
             if step + 1 < len(business_info_questions):
                 set_user_state(user_id, "business", step + 1, temp)
-                await update.message.reply_text(business_info_questions[step + 1][1], reply_markup=back_menu)
+                kb = _keyboard_for_step(business_info_questions, step + 1, PHONE_FIELDS)
+                await update.message.reply_text(business_info_questions[step + 1][1], reply_markup=kb)
             else:
                 summary = get_info_summary(temp, "business")
                 set_user_state(user_id, "business_confirm", 0, temp)
@@ -332,14 +442,21 @@ async def handle_menu(update: Update, context):
                 )
         return
 
-    # ===== انتظار برای تصویر فیش =====
-    if section == "waiting_receipt":
+    # ===== انتظار برای تصویر فیش (هزینه گزارش یا اشتراک) =====
+    if section in ("waiting_receipt", "waiting_subscription_receipt"):
         await update.message.reply_text("📸 لطفاً تصویر فیش را ارسال کنید.", reply_markup=back_menu)
         return
 
     # ===== مشاوره هوشمند Gemini (پردازش سوال آزاد) =====
+    # توجه: اگر به این نقطه رسیدیم یعنی کاربر در حالت back_menu بعد از ورود
+    # به «💬 مشاوره هوشمند» سوال آزاد می‌پرسد. بررسی اشتراک را اینجا هم
+    # تکرار می‌کنیم تا اگر اشتراک در همین فاصله منقضی شد، اجازه ندهیم.
     if not is_user_registered(user_id):
         await update.message.reply_text("⚠️ ابتدا اطلاعات شخصی را ثبت کنید.", reply_markup=main_menu)
+        return
+
+    if not has_active_subscription(user_id):
+        await update.message.reply_text(SUBSCRIPTION_REQUIRED_MSG, reply_markup=_subscription_required_keyboard())
         return
 
     if client is None:
